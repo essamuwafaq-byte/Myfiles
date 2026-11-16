@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#F4F6F9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1726" media="(prefers-color-scheme: dark)">
+<title>ملفاتي</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-180.png">
+<style>
+:root{--bg:#F4F6F9;--card:#FFFFFF;--ink:#16202E;--sub:#6B7686;--mute:#9AA4B2;--line:rgba(20,32,46,.09);--acc:#1B365D;--acc2:#2F8F9D;--chip:#E7EEF6;--chipInk:#1B365D;--sheet:#FFFFFF;--danger:#C2410C;--shadow:0 1px 2px rgba(20,32,46,.06),0 4px 14px rgba(20,32,46,.06)}
+@media (prefers-color-scheme:dark){:root{--bg:#0E1726;--card:#172235;--ink:#EEF2F7;--sub:#A3AEBD;--mute:#6F7B8C;--line:rgba(255,255,255,.08);--acc:#7FD1C7;--acc2:#7FD1C7;--chip:#1E2C44;--chipInk:#BFE9E3;--sheet:#172235;--danger:#FB923C;--shadow:none}}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Samsung Sans","Noto Sans Arabic",Tahoma,sans-serif;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.top{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(env(safe-area-inset-top) + 18px) 22px 10px}
+.row{display:flex;align-items:center;gap:10px}
+h1{font-size:30px;font-weight:700;letter-spacing:-.3px;flex:1}
+.count{font-size:14px;color:var(--sub);margin-top:2px}
+.ib{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--sub)}
+.ib:active{background:var(--line)}
+.ib svg{width:24px;height:24px}
+.search{display:none;margin-top:12px;height:46px;border-radius:14px;background:var(--card);box-shadow:var(--shadow);align-items:center;padding:0 14px;gap:10px}
+.search.on{display:flex}
+.search input{flex:1;border:0;outline:0;background:none;font:inherit;font-size:16px;color:var(--ink);-webkit-user-select:text;user-select:text}
+.search svg{width:20px;height:20px;color:var(--mute)}
+.chips{display:flex;gap:8px;margin-top:14px;overflow-x:auto;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;height:34px;padding:0 16px;border-radius:17px;font-size:14px;font-weight:600;color:var(--sub);border:1px solid var(--line);background:transparent}
+.chip.on{background:var(--chip);color:var(--chipInk);border-color:transparent}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:22px 16px;padding:10px 22px calc(110px + env(safe-area-inset-bottom))}
+@media (min-width:700px){.grid{grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:26px 20px}}
+.it{position:relative;text-align:right;transition:transform .15s}
+.it:active{transform:scale(.97)}
+.th{aspect-ratio:3/4;border-radius:14px;overflow:hidden;background:var(--card);box-shadow:var(--shadow);border:1px solid var(--line);position:relative}
+.th img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+.ph{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;padding:14px;color:#fff}
+.ph b{font-size:44px;font-weight:800;line-height:1;opacity:.9}
+.ph span{font-size:12px;font-weight:700;letter-spacing:.6px;opacity:.75;margin-top:6px;direction:ltr;text-align:right}
+.nm{font-size:15px;font-weight:600;margin-top:9px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.dt{font-size:12.5px;color:var(--mute);margin-top:3px}
+.new{position:absolute;top:8px;left:8px;background:var(--acc2);color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px}
+.empty{display:none;flex-direction:column;align-items:center;text-align:center;padding:80px 30px 0;color:var(--sub)}
+.empty.on{display:flex}
+.empty .art{width:120px;height:120px;border-radius:32px;background:var(--chip);display:flex;align-items:center;justify-content:center;color:var(--acc);margin-bottom:22px}
+.empty .art svg{width:56px;height:56px}
+.empty h2{font-size:21px;color:var(--ink);margin-bottom:8px}
+.empty p{font-size:15px;line-height:1.7;max-width:340px}
+.fab{position:fixed;left:22px;bottom:calc(24px + env(safe-area-inset-bottom));width:62px;height:62px;border-radius:20px;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(27,54,93,.35);z-index:6;transition:transform .15s}
+@media (prefers-color-scheme:dark){.fab{color:#0E1726;box-shadow:none}}
+.fab:active{transform:scale(.94)}
+.fab svg{width:30px;height:30px}
+.veil{position:fixed;inset:0;background:rgba(10,18,30,.42);opacity:0;pointer-events:none;transition:opacity .2s;z-index:20}
+.veil.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;margin:0 auto;max-width:520px;background:var(--sheet);border-radius:26px 26px 0 0;padding:10px 10px calc(14px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .26s cubic-bezier(.2,.9,.3,1);z-index:21}
+.sheet.on{transform:none}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:2px auto 12px}
+.sh-h{display:flex;gap:14px;align-items:center;padding:4px 12px 14px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.sh-h .mini{width:46px;height:61px;border-radius:8px;overflow:hidden;flex:none;background:var(--chip);position:relative}
+.sh-h .mini img{width:100%;height:100%;object-fit:cover;object-position:top}
+.sh-h b{font-size:16px;display:block;line-height:1.4;word-break:break-word}
+.sh-h small{font-size:13px;color:var(--mute)}
+.act{display:flex;align-items:center;gap:16px;width:100%;height:56px;padding:0 14px;border-radius:14px;font-size:16px;font-weight:500;text-align:right}
+.act:active{background:var(--line)}
+.act svg{width:22px;height:22px;color:var(--sub);flex:none}
+.act.red,.act.red svg{color:var(--danger)}
+.dlg{position:fixed;left:50%;top:50%;width:min(92vw,420px);transform:translate(-50%,-46%) scale(.96);opacity:0;pointer-events:none;background:var(--sheet);border-radius:24px;padding:22px 20px 14px;z-index:22;transition:.2s}
+.dlg.on{opacity:1;pointer-events:auto;transform:translate(-50%,-50%)}
+.dlg h3{font-size:19px;margin-bottom:6px}
+.dlg p{font-size:15px;color:var(--sub);line-height:1.6}
+.dlg input{width:100%;height:50px;margin-top:14px;border-radius:14px;border:1.5px solid var(--line);background:var(--bg);padding:0 14px;font:inherit;font-size:16px;color:var(--ink);outline:0;-webkit-user-select:text;user-select:text}
+.dlg input:focus{border-color:var(--acc2)}
+.dlg .btns{display:flex;justify-content:flex-start;gap:6px;margin-top:16px;flex-direction:row-reverse}
+.dlg .btns button{height:44px;padding:0 18px;border-radius:12px;font-size:15px;font-weight:700;color:var(--acc2)}
+.dlg .btns button:active{background:var(--line)}
+.dlg .btns .red{color:var(--danger)}
+.toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(16px);background:#1F2937;color:#fff;font-size:14.5px;font-weight:600;padding:12px 20px;border-radius:14px;opacity:0;transition:.25s;z-index:40;pointer-events:none;white-space:nowrap}
+.toast.on{opacity:1;transform:translateX(-50%)}
+.busy{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;background:rgba(10,18,30,.25)}
+.busy.on{display:flex}
+.busy div{background:var(--sheet);border-radius:18px;padding:18px 24px;font-size:15px;font-weight:600;display:flex;gap:12px;align-items:center;box-shadow:var(--shadow)}
+.spin{width:22px;height:22px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--acc2);animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.viewer{position:fixed;inset:0;z-index:50;background:#fff;display:none}
+.viewer.on{display:block;animation:vin .22s ease-out}
+@keyframes vin{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
+.viewer iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.vback{position:absolute;top:calc(env(safe-area-inset-top) + 8px);left:8px;z-index:2;width:38px;height:38px;border-radius:50%;background:rgba(20,32,46,.55);color:#fff;display:flex;align-items:center;justify-content:center;opacity:.0;transition:opacity .3s;pointer-events:none}
+.vback.show{opacity:1;pointer-events:auto}
+.vback svg{width:22px;height:22px}
+.vhot{position:absolute;top:0;left:0;width:26px;height:90px;z-index:1}
+input[type=file]{display:none}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="row">
+    <div style="flex:1"><h1>كل الملفات</h1><div class="count" id="count"></div></div>
+    <button class="ib" id="bSearch" aria-label="بحث"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></button>
+    <button class="ib" id="bSort" aria-label="ترتيب"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h12M4 12h9M4 17h6M18 9v10M15 16l3 3 3-3"/></svg></button>
+  </div>
+  <div class="search" id="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="q" placeholder="ابحث بالملفات" autocomplete="off"></div>
+  <div class="chips" id="chips"></div>
+</header>
+<main class="grid" id="grid"></main>
+<section class="empty" id="empty">
+  <div class="art"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 11v6M9 14h6"/></svg></div>
+  <h2>ضيف أول ملف</h2>
+  <p>اضغط على + وختار ملف HTML، أو من الواتساب سوّي مشاركة للملف وختار «ملفاتي».</p>
+</section>
+<button class="fab" id="fab" aria-label="إضافة ملف"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+<input type="file" id="pick" accept=".html,.htm,text/html" multiple>
+
+<div class="veil" id="veil"></div>
+<div class="sheet" id="sheet">
+  <div class="grab"></div>
+  <div class="sh-h"><div class="mini" id="shMini"></div><div><b id="shName"></b><small id="shMeta"></small></div></div>
+  <button class="act" data-a="open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12s3-7 8-7 8 7 8 7-3 7-8 7-8-7-8-7z"/><circle cx="12" cy="12" r="3"/></svg>فتح</button>
+  <button class="act" data-a="rename"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>تغيير الاسم</button>
+  <button class="act" data-a="share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>مشاركة الملف</button>
+  <button class="act red" data-a="del"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>حذف</button>
+</div>
+<div class="dlg" id="dlg"><h3 id="dT"></h3><p id="dP"></p><input id="dI" autocomplete="off"><div class="btns"><button id="dOk"></button><button id="dNo">إلغاء</button></div></div>
+<div class="toast" id="toast"></div>
+<div class="busy" id="busy"><div><span class="spin"></span><span id="busyT">لحظة…</span></div></div>
+<div class="viewer" id="viewer"><div class="vhot" id="vhot"></div><button class="vback" id="vback" aria-label="رجوع"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button></div>
+
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+/* ---------- storage (IndexedDB) ---------- */
+const DB=new Promise((res,rej)=>{const r=indexedDB.open('myfiles',1);r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('meta',{keyPath:'id'});d.createObjectStore('blobs');};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
+const tx=async(stores,mode,fn)=>{const d=await DB;return new Promise((res,rej)=>{const t=d.transaction(stores,mode);let out;Promise.resolve(fn(t)).then(v=>out=v);t.oncomplete=()=>res(out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});};
+const req=r=>new Promise((res,rej)=>{r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});
+const allMeta=()=>tx(['meta'],'readonly',t=>req(t.objectStore('meta').getAll()));
+const getBlob=id=>tx(['blobs'],'readonly',t=>req(t.objectStore('blobs').get(id)));
+const putMeta=m=>tx(['meta'],'readwrite',t=>{t.objectStore('meta').put(m);});
+const delFile=id=>tx(['meta','blobs'],'readwrite',t=>{t.objectStore('meta').delete(id);t.objectStore('blobs').delete(id);});
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist();}catch(e){}
+
+/* ---------- helpers ---------- */
+const stem=n=>n.replace(/\.(html?|txt)$/i,'');
+const nice=n=>stem(n).replace(/[_]+/g,' ').replace(/\s+-\s+/g,' – ').replace(/\s+/g,' ').trim();
+const key=n=>stem(n).toLowerCase().replace(/\s*\(\d+\)$/,'').replace(/[^a-z0-9؀-ۿ]+/g,'');
+const fmtSize=b=>b>1048576?(b/1048576).toFixed(1)+' MB':Math.max(1,Math.round(b/1024))+' KB';
+const AR=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+const fmtDate=t=>{const d=new Date(t),n=new Date();const hm=d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  if(d.toDateString()===n.toDateString())return 'اليوم '+hm;const y=new Date(n);y.setDate(n.getDate()-1);if(d.toDateString()===y.toDateString())return 'أمس '+hm;
+  return d.getDate()+' '+AR[d.getMonth()]+(d.getFullYear()!==n.getFullYear()?' '+d.getFullYear():'');};
+const PAL=[['#1B365D','#2F8F9D'],['#0F6E56','#1D9E75'],['#993C1D','#D85A30'],['#3C3489','#7F77DD'],['#185FA5','#378ADD'],['#72243E','#D4537E']];
+const hash=s=>{let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))|0;return Math.abs(h);};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let toastT;const toast=m=>{const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),2300);};
+const busy=(on,m)=>{$('busy').classList.toggle('on',on);if(m)$('busyT').textContent=m;};
+
+/* ---------- thumbnail: first big portrait image in the file ---------- */
+const loadImg=src=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.onerror=()=>r(null);i.src=src;});
+async function makeThumb(text){
+  const re=/data:image\/(?:png|jpe?g|webp);base64,[A-Za-z0-9+/=]{30000,}/g;let m,tries=0,best=null;
+  while((m=re.exec(text))&&tries<8){tries++;const im=await loadImg(m[0]);if(!im)continue;const r=im.naturalHeight/im.naturalWidth;
+    if(im.naturalWidth>=500&&r>1.15&&r<1.8){best=im;break;}if(!best&&im.naturalWidth>=500&&r>0.9)best=im;}
+  if(!best)return null;
+  const W=420,H=Math.round(W*4/3),c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');
+  x.fillStyle='#fff';x.fillRect(0,0,W,H);const s=W/best.naturalWidth;x.imageSmoothingQuality='high';x.drawImage(best,0,0,W,best.naturalHeight*s);
+  return c.toDataURL('image/jpeg',0.82);
+}
+const titleOf=text=>{const m=text.slice(0,200000).match(/<title[^>]*>([^<]{1,140})<\/title>/i);return m?m[1].replace(/&amp;/g,'&').replace(/\s+/g,' ').trim():'';};
+
+/* ---------- import ---------- */
+async function importFiles(files,fromShare){
+  const ok=[];for(const f of files){let good=/\.(html?)$/i.test(f.name)||/html/.test(f.type);
+    if(!good){try{const head=(await f.slice(0,4096).text()).toLowerCase();good=/<!doctype html|<html[\s>]/.test(head);}catch(e){}}
+    if(good)ok.push(/\.html?$/i.test(f.name)?f:new File([f],f.name.replace(/\.+$/,'')+'.html',{type:'text/html'}));}
+  files=ok;if(!files.length){toast('هذا مو ملف HTML');return;}
+  busy(true,files.length>1?`جاي أضيف ${files.length} ملفات…`:'جاي أضيف الملف…');
+  const metas=await allMeta();let added=0,replaced=0;
+  for(const f of files){
+    const text=await f.text();const k=key(f.name);const old=metas.find(m=>m.key===k);
+    const id=old?old.id:(Date.now().toString(36)+Math.random().toString(36).slice(2,7));
+    const thumb=await makeThumb(text).catch(()=>null);
+    const meta={id,key:k,file:f.name,name:old&&old.renamed?old.name:nice(f.name),renamed:old?!!old.renamed:false,title:titleOf(text),size:f.size,added:old?old.added:Date.now(),updated:Date.now(),opened:old?old.opened:0,thumb,fresh:true};
+    const blob=new Blob([text],{type:'text/html'});
+    await tx(['meta','blobs'],'readwrite',t=>{t.objectStore('meta').put(meta);t.objectStore('blobs').put(blob,id);});
+    old?replaced++:added++;
+  }
+  busy(false);await render();
+  toast(replaced&&!added?'تحدّث الملف ✓':added+replaced>1?`انضافت ${added+replaced} ملفات ✓`:'انضاف الملف ✓');
+}
+$('fab').onclick=()=>$('pick').click();
+$('pick').onchange=e=>{importFiles(e.target.files);e.target.value='';};
+
+/* ---------- list ---------- */
+let META=[],SORT=localStorage.getItem('sort')||'recent',FILTER='all',Q='';
+const SORTS={recent:'آخر فتح',added:'تاريخ الإضافة',name:'الاسم'};
+function chips(){$('chips').innerHTML=Object.entries(SORTS).map(([k,v])=>`<button class="chip${SORT===k?' on':''}" data-s="${k}">${v}</button>`).join('');}
+$('chips').onclick=e=>{const b=e.target.closest('.chip');if(!b)return;SORT=b.dataset.s;try{localStorage.setItem('sort',SORT)}catch(_){}chips();draw();};
+$('bSort').onclick=()=>{const ks=Object.keys(SORTS);SORT=ks[(ks.indexOf(SORT)+1)%ks.length];try{localStorage.setItem('sort',SORT)}catch(_){}chips();draw();toast('الترتيب: '+SORTS[SORT]);};
+$('bSearch').onclick=()=>{const s=$('search');s.classList.toggle('on');if(s.classList.contains('on'))$('q').focus();else{$('q').value='';Q='';draw();}};
+$('q').oninput=e=>{Q=e.target.value.trim().toLowerCase();draw();};
+function thumbHTML(m,big){if(m.thumb)return `<img src="${m.thumb}" alt="">`;const p=PAL[hash(m.key)%PAL.length];const ch=(m.name.match(/[A-Za-z؀-ۿ]/)||['•'])[0].toUpperCase();
+  return `<div class="ph" style="background:linear-gradient(160deg,${p[0]},${p[1]})"><b style="${big?'':'font-size:22px'}">${esc(ch)}</b>${big?'<span>HTML</span>':''}</div>`;}
+function draw(){
+  let L=META.slice();if(Q)L=L.filter(m=>(m.name+' '+m.title+' '+m.file).toLowerCase().includes(Q));
+  L.sort(SORT==='name'?(a,b)=>a.name.localeCompare(b.name):SORT==='added'?(a,b)=>b.added-a.added:(a,b)=>(b.opened||b.updated)-(a.opened||a.updated));
+  $('count').textContent=META.length?`${META.length} ${META.length===1?'ملف':META.length<11?'ملفات':'ملف'}`:'';
+  $('empty').classList.toggle('on',!META.length);$('chips').style.display=META.length?'':'none';
+  $('grid').innerHTML=L.map(m=>`<button class="it" data-id="${m.id}"><div class="th">${thumbHTML(m,true)}${m.fresh?'<span class="new">جديد</span>':''}</div><div class="nm">${esc(m.name)}</div><div class="dt">${fmtDate(m.opened||m.updated)}</div></button>`).join('');
+}
+async function render(){META=await allMeta();chips();draw();}
+
+/* ---------- tap = open, long press = actions ---------- */
+let lp=null,lpFired=false;
+$('grid').addEventListener('pointerdown',e=>{const it=e.target.closest('.it');if(!it)return;lpFired=false;clearTimeout(lp);
+  lp=setTimeout(()=>{lpFired=true;try{navigator.vibrate&&navigator.vibrate(25)}catch(_){}sheet(it.dataset.id);},480);});
+['pointerup','pointercancel','pointerleave'].forEach(ev=>$('grid').addEventListener(ev,()=>clearTimeout(lp)));
+$('grid').addEventListener('scroll',()=>clearTimeout(lp),{passive:true});addEventListener('scroll',()=>clearTimeout(lp),{passive:true});
+$('grid').addEventListener('contextmenu',e=>e.preventDefault());
+$('grid').addEventListener('click',e=>{const it=e.target.closest('.it');if(!it||lpFired)return;openFile(it.dataset.id);});
+
+let CUR=null;
+function sheet(id){CUR=META.find(m=>m.id===id);if(!CUR)return;$('shMini').innerHTML=thumbHTML(CUR,false);$('shName').textContent=CUR.name;
+  $('shMeta').textContent=fmtSize(CUR.size)+' · انضاف '+fmtDate(CUR.added);$('veil').classList.add('on');$('sheet').classList.add('on');pushLayer('sheet');}
+function closeSheet(){$('sheet').classList.remove('on');if(!$('dlg').classList.contains('on'))$('veil').classList.remove('on');}
+$('veil').onclick=()=>{if($('dlg').classList.contains('on'))closeDlg();else history.back();};
+$('sheet').onclick=async e=>{const b=e.target.closest('.act');if(!b||!CUR)return;const a=b.dataset.a,m=CUR;
+  if(a==='open'){history.back();setTimeout(()=>openFile(m.id),60);}
+  if(a==='rename'){dlg('تغيير الاسم','',m.name,'حفظ',async v=>{v=v.trim();if(!v)return;m.name=v;m.renamed=true;await putMeta(m);await render();history.back();});}
+  if(a==='share'){const blob=await getBlob(m.id);const f=new File([blob],m.file||(m.name+'.html'),{type:'text/html'});
+    try{if(navigator.canShare&&navigator.canShare({files:[f]}))await navigator.share({files:[f],title:m.name});else toast('المشاركة مو مدعومة هنا');}catch(err){}}
+  if(a==='del'){dlg('حذف الملف؟',`«${m.name}» راح ينحذف من التطبيق.`,null,'حذف',async()=>{await delFile(m.id);await render();history.back();toast('انحذف');},true);}
+};
+let dlgCb=null;
+function dlg(t,p,val,ok,cb,red){$('dT').textContent=t;$('dP').textContent=p;$('dP').style.display=p?'':'none';const i=$('dI');i.style.display=val===null?'none':'';i.value=val||'';
+  $('dOk').textContent=ok;$('dOk').className=red?'red':'';dlgCb=cb;$('veil').classList.add('on');$('dlg').classList.add('on');if(val!==null)setTimeout(()=>{i.focus();i.select();},80);}
+function closeDlg(){$('dlg').classList.remove('on');if(!$('sheet').classList.contains('on'))$('veil').classList.remove('on');}
+$('dNo').onclick=closeDlg;$('dOk').onclick=async()=>{const cb=dlgCb;closeDlg();if(cb)await cb($('dI').value);};
+$('dI').onkeydown=e=>{if(e.key==='Enter')$('dOk').click();};
+
+/* ---------- viewer ---------- */
+// Runs inside each opened file: its own saved data (localStorage) per file, and WhatsApp / outside links open in their apps.
+const INJECT=k=>`<script>(function(){try{var P='f:${k}:',S=Storage.prototype,g=S.getItem,s=S.setItem,r=S.removeItem;
+S.getItem=function(a){return g.call(this,P+a)};S.setItem=function(a,b){return s.call(this,P+a,b)};S.removeItem=function(a){return r.call(this,P+a)};}catch(e){}
+function out(u){try{var x=new URL(u,location.href);if(/^(wa\\.me|api\\.whatsapp\\.com|whatsapp\\.com|web\\.whatsapp\\.com)$/.test(x.hostname)){var t=x.searchParams.get('text')||'',ph=x.hostname==='wa.me'?x.pathname.replace(/\\D/g,''):(x.searchParams.get('phone')||'');
+top.location.href='whatsapp://send?'+(ph?'phone='+ph+'&':'')+'text='+encodeURIComponent(t);return true;}
+if(/^https?:$/.test(x.protocol)&&x.origin!==location.origin){window.open(x.href,'_blank','noopener');return true;}
+if(/^(tel|mailto|sms|whatsapp|intent):/.test(x.protocol)){top.location.href=x.href;return true;}}catch(e){}return false;}
+document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[href]');if(!a||a.hasAttribute('download'))return;var h=a.getAttribute('href');if(!h||h.charAt(0)==='#'||/^(blob|data|javascript):/.test(h))return;if(out(a.href)){e.preventDefault();e.stopPropagation();}},true);
+})();<\/script>`;
+let vURL=null;
+async function openFile(id){
+  const m=META.find(x=>x.id===id);if(!m)return;const blob=await getBlob(id);if(!blob){toast('الملف مو موجود');return;}
+  let text=await blob.text();const inj=INJECT(m.key);const h=text.search(/<head[^>]*>/i);
+  if(h>=0){const e=text.indexOf('>',h)+1;text=text.slice(0,e)+inj+text.slice(e);}else{const d=text.match(/^\s*<!doctype[^>]*>/i);text=d?d[0]+inj+text.slice(d[0].length):inj+text;}
+  if(vURL)URL.revokeObjectURL(vURL);vURL=URL.createObjectURL(new Blob([text],{type:'text/html'}));
+  const v=$('viewer');v.querySelectorAll('iframe').forEach(f=>f.remove());const f=document.createElement('iframe');
+  f.setAttribute('allow','web-share; fullscreen; clipboard-write; vibrate');f.setAttribute('allowfullscreen','');f.src=vURL;v.appendChild(f);
+  v.classList.add('on');pushLayer('viewer');flashBack();
+  m.opened=Date.now();m.fresh=false;putMeta(m).then(render);
+}
+function closeViewer(){const v=$('viewer');v.classList.remove('on');setTimeout(()=>{if(!v.classList.contains('on')){v.querySelectorAll('iframe').forEach(f=>f.remove());if(vURL){URL.revokeObjectURL(vURL);vURL=null;}}},300);}
+let fbT;function flashBack(){const b=$('vback');b.classList.add('show');clearTimeout(fbT);fbT=setTimeout(()=>b.classList.remove('show'),2600);}
+$('vhot').onclick=flashBack;$('vhot').addEventListener('touchstart',flashBack,{passive:true});
+$('vback').onclick=()=>history.back();
+
+/* ---------- Android back button / gesture closes the top layer ---------- */
+const layers=[];
+function pushLayer(n){layers.push(n);history.pushState({l:layers.length},'');}
+addEventListener('popstate',()=>{const n=layers.pop();if(n==='viewer')closeViewer();else if(n==='sheet'){closeSheet();closeDlg();}});
+
+/* ---------- files shared from WhatsApp etc. (stored by the service worker) ---------- */
+async function takeShared(){const p=new URLSearchParams(location.search);if(!p.has('shared'))return;history.replaceState(null,'',location.pathname);
+  try{const c=await caches.open('incoming');const ks=await c.keys();const files=[];
+    for(const r of ks){const res=await c.match(r);const b=await res.blob();files.push(new File([b],decodeURIComponent(res.headers.get('x-name')||'file.html'),{type:'text/html'}));await c.delete(r);}
+    if(files.length)await importFiles(files,true);else if(p.get('shared')==='0')toast('ما وصل ملف HTML');}catch(e){toast('ما كدرت أضيف الملف');}}
+
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+render().then(takeShared);
+</script>
+</body>
+</html>
