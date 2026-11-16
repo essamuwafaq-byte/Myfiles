@@ -1,7 +1,7 @@
 {
-  "name": "ملفاتي",
-  "short_name": "ملفاتي",
-  "description": "افتح ملفات HTML بالشاشة الكاملة بدون متصفح",
+  "name": "My Files",
+  "short_name": "My Files",
+  "description": "Open HTML files full screen, without a browser",
   "id": "./",
   "start_url": "./",
   "scope": "./",
@@ -9,13 +9,33 @@
   "orientation": "any",
   "background_color": "#F4F6F9",
   "theme_color": "#F4F6F9",
-  "dir": "rtl",
-  "lang": "ar",
+  "dir": "ltr",
+  "lang": "en",
   "icons": [
-    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-    {"src": "maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
-    {"src": "maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ],
   "share_target": {
     "action": "share",
@@ -25,7 +45,16 @@
       "title": "title",
       "text": "text",
       "files": [
-        {"name": "files", "accept": ["text/html", ".html", ".htm", "application/octet-stream", "*/*"]}
+        {
+          "name": "files",
+          "accept": [
+            "text/html",
+            ".html",
+            ".htm",
+            "application/octet-stream",
+            "*/*"
+          ]
+        }
       ]
     }
   }
