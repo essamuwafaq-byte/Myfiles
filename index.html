@@ -87,10 +87,11 @@ h1{font-size:30px;font-weight:700;letter-spacing:-.4px}
 @keyframes sp{to{transform:rotate(360deg)}}
 .viewer{position:fixed;inset:0;z-index:50;background:var(--bg);visibility:hidden;opacity:0;transition:opacity .18s,visibility 0s .18s}
 .viewer.on{visibility:visible;opacity:1;transition:opacity .18s}
-.viewer iframe{position:absolute;inset:0;width:100%;height:100%;border:0;visibility:hidden}
-.viewer.on iframe.cur{visibility:visible}
+.viewer iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:none}
+.viewer.on iframe.cur{display:block}
 .vload{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:1;transition:opacity .2s}
 .vload.gone{opacity:0;pointer-events:none}
+.vload.off{display:none}
 .vload img{max-width:70%;max-height:70%;border-radius:12px;box-shadow:var(--shadow);opacity:.9}
 .vload .spin{position:absolute;bottom:18%}
 .vback{position:absolute;top:calc(env(safe-area-inset-top) + 8px);left:8px;z-index:3;width:38px;height:38px;border-radius:50%;background:rgba(20,32,46,.55);color:#fff;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .3s;pointer-events:none}
@@ -300,11 +301,11 @@ function dropFrame(id){const f=FR.get(id);if(!f)return;f.remove();URL.revokeObje
 let openId=null;
 async function openFile(id){
   const m=META.find(x=>x.id===id);if(!m)return;
-  const L=$('vload');L.innerHTML=(m.thumb?`<img src="${m.thumb}" alt="">`:'')+'<span class="spin"></span>';L.classList.remove('gone');
+  const L=$('vload');L.innerHTML=(m.thumb?`<img src="${m.thumb}" alt="">`:'')+'<span class="spin"></span>';L.classList.remove('gone','off');
   $('viewer').classList.add('on');pushLayer('viewer');openId=id;
   const f=await frameFor(id);if(!f){toast('File not found');closeTop();return;}
   $('viewer').querySelectorAll('iframe.cur').forEach(x=>x.classList.remove('cur'));f.classList.add('cur');
-  await f._ready;try{f.contentWindow.postMessage('nf-open','*')}catch(e){}if(openId===id){L.classList.add('gone');flashBack();try{f.contentWindow.focus()}catch(e){}}
+  await f._ready;try{f.contentWindow.postMessage('nf-open','*')}catch(e){}if(openId===id){L.classList.add('gone');setTimeout(()=>{if(L.classList.contains('gone'))L.classList.add('off');},260);flashBack();try{f.contentWindow.focus()}catch(e){}}
   m.opened=Date.now();m.fresh=false;putMeta(m).then(()=>setTimeout(render,400));
 }
 function closeViewer(){try{if(document.fullscreenElement)document.exitFullscreen();}catch(e){}$('viewer').querySelectorAll('iframe').forEach(f=>{try{f.contentWindow.postMessage('nf-closed','*')}catch(e){}});openId=null;$('viewer').classList.remove('on');$('vback').classList.remove('show');}
