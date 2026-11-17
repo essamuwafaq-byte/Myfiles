@@ -17,12 +17,25 @@ jobs:
         run: |
           SDKM="$(ls -1d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)"
           yes | "$SDKM" --licenses >/dev/null 2>&1 || true
+      - name: Fetch Android Auto head unit certificates (same files the public Godlys/headswap fork uses)
+        run: |
+          for f in hur/cert.pem hur/key.pem jvc/cert.pem jvc/key.pem; do
+            mkdir -p "android/app/src/main/assets/aa/$(dirname $f)"
+            curl -fsSL "https://raw.githubusercontent.com/Godlys/headswap/45e014150b9505b2da54882ccde10e32034dbc74/android/app/src/main/assets/aa/$f" -o "android/app/src/main/assets/aa/$f"
+          done
       - name: Unit tests
         working-directory: android
         run: chmod +x gradlew && ./gradlew --no-daemon :app:testDebugUnitTest --tests '*BlackScreenWatchdogTest*' --tests '*AaBridgeGraceTest*'
       - name: Build APK
         working-directory: android
         run: ./gradlew --no-daemon :app:assembleDebug
+      - name: Check certificates are inside the APK
+        run: |
+          APK=$(ls android/app/build/outputs/apk/debug/*.apk | head -1)
+          for f in aa/hur/cert.pem aa/hur/key.pem aa/jvc/cert.pem aa/jvc/key.pem; do
+            unzip -p "$APK" "assets/$f" | head -1 | grep -q -- "-----BEGIN" || { echo "missing $f"; exit 1; }
+          done
+          echo "certificates OK"
       - uses: actions/upload-artifact@v4
         with:
           name: headswap-essa
