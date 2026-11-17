@@ -12,6 +12,14 @@ object BlackScreenWatchdog {
 
     /** От ГУ ни байта: сокеты открыты, а CarLife на ГУ не начался. */
     const val NO_HU_BYTES_MS = 10_000L
+    /**
+     * ГУ на связи, а сама VIDEO_ENCODER_START так и не прислала: CarLife на ГУ не вышел на экран, мост стартовал видео
+     * сам (START_FALLBACK) и шлёт кадры в никуда - экран чёрный. Toyota Levin HSAE ch 20452114 (лог 2026-11-17): в рабочих
+     * сессиях START приходит через 1-1,6 с после INIT, в чёрной не пришёл за 2 мин при 29 fps в ГУ.
+     */
+    const val NO_HU_START_MS = 12_000L
+    /** Пока ГУ не прислала START, напоминаем ей FOREGROUND с таким шагом. */
+    const val FOREGROUND_NUDGE_MS = 3_000L
     /** После START (или возврата с PAUSE) ни одного кадра AA. */
     const val NO_PICTURE_MS = 10_000L
     /** Картинка шла и пропала при живом START. Только если кадры идут и на статичном экране (перекодирование или свой IDR). */
@@ -19,6 +27,7 @@ object BlackScreenWatchdog {
 
     enum class Verdict(val why: String) {
         NO_HU_BYTES("ГУ молчит"),
+        NO_HU_START("ГУ не вывела CarLife на экран (нет START от ГУ)"),
         NO_PICTURE("нет картинки после START"),
         PICTURE_STALL("картинка пропала"),
         ;
@@ -33,6 +42,7 @@ object BlackScreenWatchdog {
      * @param paused ГУ прислала PAUSE и START ещё не вернулся
      * @param firstPictureMs первый кадр AA, ушедший в ГУ, 0 - не было
      * @param lastPictureMs последний кадр AA, ушедший в ГУ
+     * @param huStartMs когда ГУ сама прислала VIDEO_ENCODER_START (не свой старт), 0 - ни разу за сессию
      * @param framesOnStaticScreen кадры идут и без движения на экране (перекодирование повторяет кадр, свой IDR раз в 2 с)
      */
     fun check(
@@ -44,8 +54,10 @@ object BlackScreenWatchdog {
         firstPictureMs: Long,
         lastPictureMs: Long,
         framesOnStaticScreen: Boolean,
+        huStartMs: Long = lastStartMs,
     ): Verdict? {
         if (huBytes == 0L) return if (nowMs - sessionStartMs >= NO_HU_BYTES_MS) Verdict.NO_HU_BYTES else null
+        if (huStartMs == 0L) return if (nowMs - sessionStartMs >= NO_HU_START_MS) Verdict.NO_HU_START else null
         if (paused || lastStartMs == 0L) return null
         if (firstPictureMs == 0L) return if (nowMs - lastStartMs >= NO_PICTURE_MS) Verdict.NO_PICTURE else null
         if (!framesOnStaticScreen) return null

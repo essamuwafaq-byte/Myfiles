@@ -17,7 +17,8 @@ class BlackScreenWatchdogTest {
         first: Long = 0,
         last: Long = 0,
         staticFrames: Boolean = true,
-    ) = BlackScreenWatchdog.check(now, t0, huBytes, start, paused, first, last, staticFrames)
+        huStart: Long = start,
+    ) = BlackScreenWatchdog.check(now, t0, huBytes, start, paused, first, last, staticFrames, huStart)
 
     @Test
     fun silentHeadUnitFiresAfterTimeout() {
@@ -26,8 +27,15 @@ class BlackScreenWatchdogTest {
     }
 
     @Test
-    fun noStartYetIsNotBlackScreen() {
-        assertNull(check(t0 + 120_000, start = 0))
+    fun noStartAtAllIsBlackScreen() {
+        assertNull(check(t0 + BlackScreenWatchdog.NO_HU_START_MS - 1, start = 0))
+        assertEquals(Verdict.NO_HU_START, check(t0 + 120_000, start = 0))
+    }
+
+    @Test
+    fun startThenPauseIsUserInCarMenusNotBlack() {
+        // ГУ прислала START, потом PAUSE (радио, меню машины): не трогаем сколько угодно
+        assertNull(check(t0 + 600_000, start = t0 + 1_500, paused = true, first = t0 + 2_000, last = t0 + 60_000, huStart = t0 + 1_500))
     }
 
     @Test
@@ -69,6 +77,22 @@ class BlackScreenWatchdogTest {
     @Test
     fun reasonCarriesPrefix() {
         for (v in Verdict.entries) assertTrue(v.reason.startsWith(BlackScreenWatchdog.REASON_PREFIX))
+    }
+
+    @Test
+    fun headUnitNeverSentStartIsBlackEvenWithFramesFlowing() {
+        // лог Levin 2026-11-17: свой старт через 1,5 с, 29 fps в ГУ, а START от ГУ нет - экран чёрный
+        val selfStart = t0 + 1_500
+        val streaming = t0 + BlackScreenWatchdog.NO_HU_START_MS - 1
+        assertNull(check(streaming, start = selfStart, first = selfStart + 700, last = streaming, huStart = 0))
+        assertEquals(Verdict.NO_HU_START,
+            check(t0 + BlackScreenWatchdog.NO_HU_START_MS, start = selfStart, first = selfStart + 700, last = t0 + 11_990, huStart = 0))
+    }
+
+    @Test
+    fun headUnitStartKeepsWorkingSessionAlive() {
+        val huStart = t0 + 1_600
+        assertNull(check(t0 + 600_000, start = huStart, first = huStart + 300, last = t0 + 599_900, huStart = huStart))
     }
 
     @Test

@@ -201,6 +201,9 @@ class CarLifeSession(
     @Volatile private var firstAaPictureMs = 0L
     @Volatile private var lastAaPictureMs = 0L
     @Volatile private var watchdogFired = false
+    /** ГУ сама прислала VIDEO_ENCODER_START (свой старт по START_FALLBACK сюда не пишет). */
+    @Volatile private var huStartMs = 0L
+    private var lastForegroundNudgeMs = 0L
     private val vrReassembler = DataReassembler()  // h425: Delphi режет VR MIC_DATA на кадры по 256 Б
 
     fun start() {
@@ -515,7 +518,10 @@ class CarLifeSession(
                 CarLifeState.auth += " -> HU_AUTHEN_RESULT=$ok"
             }
             Msg.VIDEO_ENCODER_INIT -> onVideoInit(m)
-            Msg.VIDEO_ENCODER_START -> onVideoStart()
+            Msg.VIDEO_ENCODER_START -> {
+                if (huStartMs == 0L) huStartMs = SystemClock.elapsedRealtime()
+                onVideoStart()
+            }
             Msg.VIDEO_ENCODER_PAUSE -> {
                 paused = true
                 desktopVideoDelivery.pause()
@@ -1496,6 +1502,13 @@ class CarLifeSession(
      */
     private fun checkBlackScreen(now: Long): Boolean {
         if (!air || watchdogFired || !BLACK_SCREEN_WATCHDOG) return false
+        // ГУ на связи, а CarLife на экран не вывела: напоминаем FOREGROUND, как после INIT_DONE
+        if (huStartMs == 0L && videoInited && now - lastForegroundNudgeMs >= BlackScreenWatchdog.FOREGROUND_NUDGE_MS &&
+            now - t0 >= BlackScreenWatchdog.FOREGROUND_NUDGE_MS) {
+            lastForegroundNudgeMs = now
+            AppLog.i("сессия: ГУ не прислала START, напоминаю FOREGROUND")
+            sendCmd(Msg.FOREGROUND, null)
+        }
         val verdict = BlackScreenWatchdog.check(
             nowMs = now,
             sessionStartMs = t0,
@@ -1505,6 +1518,7 @@ class CarLifeSession(
             firstPictureMs = firstAaPictureMs,
             lastPictureMs = lastAaPictureMs,
             framesOnStaticScreen = bridge.transcodeEnabled || bridge.spliceMs > 0,
+            huStartMs = huStartMs,
         ) ?: return false
         watchdogFired = true
         AppLog.i("сессия: чёрный экран (${verdict.why}), переподключаюсь", true)
