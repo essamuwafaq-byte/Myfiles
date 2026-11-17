@@ -1,0 +1,220 @@
+# Архитектура Headswap
+
+Карта для того, кто открыл репо впервые (человек или Claude). Что где лежит, как идут данные, что нельзя ломать.
+Почему сделано именно так — в [docs/adr/](adr/README.md). Протоколы — в `docs/carlife-protocol.md`,
+`docs/carlife-v2-handshake.md`, `docs/aa-headunit.md`.
+
+Ссылки на код даны по именам классов и функций, номера строк не пишем: они быстро устаревают. Искать грепом
+или через LSP. `$P` = `android/app/src/main/java/com/yegorkapomidorka/headswap`.
+
+## Что это
+
+Телефон стоит между протоколом Baidu CarLife, на котором говорит ГУ, и Android Auto на этом же телефоне:
+
+```
+ГУ машины  ⇄  CarLife (USB AOA или Wi-Fi)  ⇄  Headswap  ⇄  TCP 127.0.0.1:5277  ⇄  Android Auto (сервер ГУ)
+```
+
+Для ГУ Headswap — телефон с Baidu CarLife (MD). Для AA — головное устройство («Desktop Head Unit»). Сервер ГУ
+в AA пользователь включает сам в режиме разработчика AA (ADR 0001, 0002).
+
+ГУ общается с Baidu CarLife, а не с AA, поэтому часть функций AA теряется: всё, что AA ждёт от машины, приходит
+только если для этого есть аналог в CarLife. Сюда относятся тёмная/светлая тема карты (датчика фар в CarLife нет,
+есть только CHANGE_MD_THEME), передача и задний ход, скорость и прочие события машины (данные машины CarLife
+мы вслепую не запрашиваем, ADR 0010). Прежде чем обещать функцию AA, проверить, есть ли для неё сообщение в CarLife.
+
+## Стек и сборка
+
+- Один gradle-модуль `:app` (`android/`), minSdk 29, target 37, JDK 17.
+- **Без AndroidX и Compose.** `MainActivity : android.app.Activity`, экраны строятся кодом (`ui/Kit.kt`, `ui/Screen.kt`).
+  Строки: `res/values` (en), `values-ru`, `values-ar`, `values-fr`, `values-zh-rCN` — правятся вместе. Тексты, которые видит
+  ГУ (заглушка моста, ошибки рабочего стола), тоже из ресурсов, не литералами в коде.
+- Варианты: `debug`, `release`, `smoke` (buildType: debug с суффиксом `.smoke`, ставится рядом с release).
+  Flavors нет. `-Pwlbeta=false` выключает воздух.
+- Сертификаты AA (`assets/aa/{hur,jvc}`) в git нет. Задача `syncAaCerts` берёт их из основного checkout, release без них падает.
+  Подпись release — `~/.android-keys/headswap-release.properties`.
+- Тесты: `cd android; ./gradlew testDebugUnitTest` (JUnit4, `android/app/src/test/...`). Python: `pc-headunit/tests/`,
+  `python -X utf8 -m unittest tools/test_logdiag.py`. UI на стенде ГУ (телефон по USB):
+  `cd pc-headunit; python -m pytest autotest/scenarios --lang all` — README в `pc-headunit/autotest/`, ADR 0042.
+
+## Пакеты
+
+| Где | Что |
+|---|---|
+| `$P/` (корень) | Сторона CarLife и сервис. `BridgeService` — оркестратор. `CarLifeSession` — одна сессия с ГУ. `Handshake`, `HuAuth` — рукопожатие и HU_AUTHEN. `Protocol.kt` (`Ch`, `Msg`, `Wire`, `FrameParser`), `Proto.kt` (свой protobuf). `VideoSource` — заглушка до прихода AA. `AppLog`, `CrashLog`. |
+| `$P/aa/` | Сторона AA и мозг моста. `AapSession` (TCP+TLS к 5277), `AapMessages` (SDR, каналы), `AaBridge.kt` (`AaBridgeCore` — всё связывание и флаги ГУ; `AaConnector` — переподключение), `BridgeHost` (держит AA между сессиями CarLife). Видео: `AaTranscoder`, `GlRelay`, `FeedQueue`, `IdrSplice`/`IdrIntra`/`RefDecoder`, `SpsCrop`, `VideoMode`, `CarPreset`, `BitratePolicy`, `IdrBitrateCeiling`, `ThermalThrottle`. Звук: `AaAudio`, `MusicResampler`, `Equalizer`, `TtsPreroll`. Микрофон: `AaMic`, `PhoneMicCapture`. Мета: `AaMeta` (`MetaRelay`). Тач: `TouchPacer`, `TouchDecimator`. Настройки: `AaSettings` (`AaPrefs`). Диагностика: `AaServerCheck`, `AaProbe`. |
+| `$P/link/` | Транспорт к ГУ. `CarTransport` + `TransportCaps`, `StreamTransport` (USB и debug-TCP, один поток), `MultiSocketTransport` (воздух, 6 сокетов). `link/bt` — RFCOMM `carlife`, вход в Wi-Fi Direct (`CarlifeBtProbe`, `P2pJoin`). `link/car` — выбранная машина, автостарт по ACL, «Wi-Fi машины» (`CarProfile`, `CarAclReceiver`, `CarNetwork`, `CarLogic`). `link/wifi` — маяк `HotspotBeacon` (UDP 7999), `HotspotDetect`. `link/diag/WLog` — лог воздуха. |
+| `$P/ui/` | Экраны (`HomeScreen`, `OnboardingScreen`, `SettingsScreen`, `DevScreen`, `DiagScreen`, `CarChooser`), чистая логика (`HeadswapState`/`HomeLogic`, `Readiness`), `LogShare` (zip логов). |
+| `$P/carapp/` | Свой хост Car App Library для навигатора рабочего стола (ADR 0021). `CarAppCatalog` (поиск по CarAppService + NAVIGATION), `CarAppSession` (одна сессия: bind → handshake → create/start/resume, поверхность, области, Trip → `aa/DesktopNavHints`), `CarAppHost` (фасад для лаунчера), `CarUiMapper` + `CarUi` (шаблоны → модель для Compose), `CarAppLogic` (чистая: области, dpi, вердикты). Шаблоны рисует `launcher/NavHostUi.kt`. |
+| `$P/diag/` | `LogDiag` — Kotlin-порт `tools/logdiag.py`, те же правила. |
+| `$P/update/` | `UpdateLogic` (GitHub releases/latest, чистая), `Updater` (скачать, SHA-256, PackageInstaller). ADR 0012. |
+| `src/debug`, `src/release` | `DebugTransport.kt`: в debug — TCP к эмулятору ГУ, в release — заглушка. |
+| `pc-headunit/` | Python. `hu.py` — AA-ГУ для ПК (эталоны `golden.txt` для тестов). `carlife_hu.py` — эмулятор ГУ CarLife для проверки моста. `stand.ps1` — стенд одной командой (smoke на телефоне + окно ГУ; `-PrepareOnly` — только подготовка телефона). `autotest/` — автотесты UI без LLM: `Stand` (тапы, кнопки ГУ, OCR Windows, сравнение с эталонами `refs/<hu>-<W>x<H>/<язык>/`), `strings.py` (строки по ключам из `res/values*`), сценарии pytest в `autotest/scenarios`. |
+| `tools/` | `logdiag.py` + `logdiag_rules.json` (причина обрыва по логу), `logdigest.py` (сводка лога). |
+
+Три файла-ядра большие: `AaBridge.kt` (~2800 строк), `CarLifeSession.kt` (~1500), `BridgeService.kt` (~1100).
+Читать по нужной функции, не целиком.
+
+## Поток данных
+
+**1. Старт.** USB: ГУ переводит телефон в аксессуар Baidu/CarLife → `USB_ACCESSORY_ATTACHED` в `MainActivity` →
+`Actions.scan` → разрешение → `BridgeService.onStartCommand` → `command()` → `startSession(StreamTransport.fromPfd(...))`.
+Воздух: кнопка (`ACTION_WIFI_B`) или ACL выбранной машины (`CarAclReceiver` → `ACTION_WIFI_B_AUTO`) → `startWifiB` → `startTcp6`.
+Кабель побеждает воздух. После обрыва кабеля при машине рядом по BT — переход на воздух через 3 с.
+
+**2. Транспорт воздуха.** Телефон слушает 6 портов (CMD 7240, VIDEO 8240, MEDIA 9240, TTS 9241, VR 9242, TOUCH 9340),
+ГУ подключается клиентом. Как телефон и ГУ оказываются в одной сети:
+(a) BT RFCOMM `carlife` + вход в P2P-группу ГУ (Mazda G6S); (b) хотспот телефона + маяк `HotspotBeacon`;
+(c) «Wi-Fi машины» — телефон входит в сеть ГУ (`CarNetwork`, VW). ADR 0014.
+
+**3. Сессия CarLife** (`CarLifeSession.onCmd`):
+HU_PROTOCOL_VERSION → стартовая пачка (`Handshake.startBatch`) → HU_INFO и STATISTIC_INFO (тут определяется ГУ, см. ниже) →
+HU_AUTHEN → `HuAuth` → FEATURE_CONFIG (AUDIO_TRANSMISSION_MODE=1 — звук по BT, по USB не шлём) →
+VIDEO_ENCODER_INIT (размер берём из видео-режима, а не у ГУ; размер ГУ только запоминаем) → START
+(нет за 1,5 с — стартуем сами) → PAUSE/START/RESET по ходу → MD_EXIT.
+
+**4. Сторона AA** (`BridgeService.createHost` → `AaConnector` → `AapSession`): TCP 127.0.0.1:5277 → VERSION → TLS
+(сертификаты jvc/hur) → AUTH_COMPLETE → SDR (`head_unit_make/model` всегда «Google / Desktop Head Unit», выбранная марка машины — только в поле `make`; ADR 0015) → каналы
+CONTROL0, SENSOR1, VIDEO2, INPUT3, SPEECH4, SYSTEM5, MEDIA6, MIC7, BT8, MEDIA_PLAYBACK9, NAVIGATION10.
+Закрытие всегда ByeBye → shutdownOutput → дочитать EOF → close.
+
+**5. Видео** (`AaBridgeCore.onFrame` → `aaFrame`):
+- *Перекодирование* (включается вручную, ADR 0004): `feedTranscoder` → `AaTranscoder` (декодер → `GlRelay` → энкодер,
+  повтор кадра каждые 100 мс, нить `aa-trans-feed` через `FeedQueue` — ADR 0011) → `onEncoderFrame` → ГУ.
+- *Прямой проброс* (по умолчанию с 3.0, ADR 0018): `passthroughFrame`; поля режет `SpsCrop` правкой SPS; раз в 2 с свой IDR (`IdrSplice`, ADR 0005; выключается галкой для разработчиков `AaPrefs.ownIdr`).
+- *Свой IDR* (`IdrSplice`) перед отправкой смотрит `link.videoStats()`: при бэклоге > 200 мс или очереди > 10
+  кадров IDR откладывается; при отказе `sendVideo` пауза растёт (10/20/30 с) и вставка продолжает пробовать,
+  без выключения до конца сессии (ADR 0039).
+- В ГУ: `CarLifeSession.sendVideo` → `AnnexB.fixSps` → `sendVideoData`. Очередь переполнилась (>30 кадров или
+  ~500 мс) — кадры выбрасываются до следующего IDR.
+- *Свой лаунчер*: телефон кодирует Surface один раз; у пресетов CR-V 2026 потолок битрейта — `VideoGeometry.bitrate`
+  (WIDE_HD 6 Мбит/с) и на Wi-Fi старт с потолка без подъёма; у остальных машин прежняя политика 8 Мбит/с (ADR 0039).
+- Где решается «проброс или перекодирование» — в четырёх местах: `AaPrefs.transcode`, `VideoGeometry.effective()`,
+  `BridgeService.startSession` (режим не кропается — принудительно перекодирование), рантайм-флаги ГУ (Pioneer, Mobis).
+
+**6. Звук.** AA MEDIA(6) → CarLife MEDIA(3), AA SPEECH(4) → CarLife TTS(4), SYSTEM(5) не пересылается.
+Музыка 48 кГц стерео (ресэмпл `MusicResampler` для 44,1/32/24/22), TTS 16 кГц моно. Порядок как у Baidu:
+перед TTS MODULE_STATUS NAVI=1, TTS_STOP с задержкой 1,5 с.
+
+**7. Микрофон.** ГУ шлёт VR_MIC_DATA (PCM16 16 кГц) → `AaMicRouter` → `AapSession.sendMicPcm`.
+Режим car/phone/auto (auto: при тишине от ГУ 2 с — микрофон телефона).
+
+**8. Тач.** `CarLifeSession.onTouch` → `AaBridgeCore.onCarlifeTouch` → `TouchDecimator` → `dispatchTouch` →
+`VideoGeometry.mapTouch` → `AapSession.sendTouch`. Кнопки руля — `onCarlifeHardKey`.
+На рабочем столе перед прореживателем стоит `VolumeSwipe`: два пальца у правого края двигают громкость медиа
+телефона (`DesktopMedia.adjustVolume`), на Vezel всегда, иначе по `AaPrefs.volumeSwipe` (ADR 0038).
+
+**9. Навигация и приборка.** AA NAVIGATION(10) → `MetaRelay` → `sendNaviTurn` (NAVI_NEXT_TURN_INFO), только после
+подписки ГУ. Honda: `HondaClusterRoad` ужимает название улицы под приборку.
+
+**10. Метаданные медиа.** AA MEDIA_PLAYBACK(9) → `MetaRelay` → `sendMediaInfo` (обложка JPEG < 30 КБ).
+
+**11. Конец.** Обрыв USB/EOF → `BridgeService.onSessionClosed` → `BridgeHost` держит AA живой 8 с и отдаёт её новой сессии.
+
+## Обходы под конкретные ГУ
+
+Правило: обход включается только на том ГУ, где найден, флагом (ADR 0006). Исключение из `CLAUDE.md`: фиксы по марке
+действуют на все модели и каналы марки (Honda определяется по префиксу канала 2077/2083).
+
+ГУ определяется в `AaBridgeCore.onHuInfo` (manufacturer/model/product/board из HU_INFO) и `onHuStatistic`
+(`STATISTIC_INFO.channel` — по сути прошивка ГУ). Флаги — `@Volatile var hu*` в `AaBridgeCore`, константы каналов
+в его companion.
+
+| Флаг | ГУ | Что делает |
+|---|---|---|
+| `huDesayG6S` | Mazda CX-5 Desay G6S, ch 20622116 | без маршрутного NAVI=1; на PAUSE пустой VIDEO_DATA (USB) / heartbeat (воздух) |
+| `huHonda` | ch 2077xxxx/2083xxxx | roadName под приборку, ждать подписку, перевзвод NAVI |
+| `huVw20082120` | ch 20082120/22/34/14, 21290002 | **по смыслу «heartbeat на PAUSE каждые 100 мс»**, имя историческое (ADR 0007) |
+| `huIdleVideoHeartbeat` | 20082114, 21290002 | heartbeat и без PAUSE после 1 с без кадров |
+| `huVwCns2Delphi` | 20082114 | речь в канал VR, пейсер тача, свои кнопки звонка |
+| `huVwBt1420` | «VW BT 1420» | воздух: heartbeat на PAUSE, тёплое возобновление |
+| `huVw20082138` | VW ID (20082138, 20082128+«VW BT 9491», пресет ID. UNYX) | потолок битрейта по IDR (ADR 0008) |
+| `huHyundaiCn7` | product `wp_cn7cpe_cn` | музыка 32 кГц |
+| `huPioneerRm56` | Pioneer RM56E8B | перекодирование, 800 кбит/с, ≤10 fps, музыка 22 кГц |
+| `huMazda20622111` | ch 20622111 | VIDEO_DATA ≤ 15000 Б, 1,5 Мбит/с, обложка ≤ 12 КБ (ADR 0009) |
+| `huMobisNx4c` | board/model CCNC, ch 20022188 | «режим Baidu»: AOA одним write, 20 fps, свой потолок IDR |
+
+**Добавить ГУ:**
+1. Константа канала/имени в companion `AaBridgeCore`.
+2. `@Volatile var huXxx` с `private set` рядом с остальными.
+3. **Сброс в `attach()`.** `AaBridgeCore` живёт дольше сессии CarLife (grace 8 с), без сброса флаг утечёт на следующую ГУ.
+4. Установка в `onHuInfo`/`onHuStatistic`.
+5. Поведение — в `CarLifeSession` (потолки, нарезка, heartbeat) или в ядре.
+6. Тест в `aa/AaBridgeTest.kt`.
+7. По желанию пресет `CarPreset` и строки en/ru.
+
+Пресеты разрешений — enum `VideoMode` (R720 по умолчанию, R800, R1024, R1080, WIDE*, WIDE_2_1, WIDE_640, WIDE_976).
+Машины — enum `CarPreset`: выбор разом пишет transcode/videoMode/DPI/fps/musicRate. **Enum хранятся в prefs по имени —
+не переименовывать.**
+
+## Логи
+
+- `AppLog`: logcat `Headswap` + файл `headswap-<дата>.log` в external files. `AppLog.msg` пишет `RX|TX <КАНАЛ> 0x… ИМЯ len=…`.
+  `WLog`: строки `WL <фаза> <событие> k=v`. `CrashLog`: краши и причины прошлых смертей процесса (`low_memory`).
+- Отчёт пользователя — zip из `LogShare` (`device.txt`, до 5 логов по 4 МиБ с конца, `wireless.log`). Где брать полные логи — память `headswap-logs`.
+- Ориентиры в логе: `== USB_ACCESSORY_ATTACHED`, `сессия: старт`, `== РЕЗЮМЕ СЕССИИ (N с, причина: …)`, `== HU_INFO:`,
+  `== STATISTIC_INFO:`, `== ГУ ПРОСИТ РАЗРЕШЕНИЕ`, `VIDEO_ENCODER_PAUSE`, `шлю пустой VIDEO_HEARTBEAT`, `BRIDGE IDR -> CarLife`,
+  `AA сессия установлена`, `AA нет VERSION_RESPONSE`, `EOF (ГУ закрыла сокет)`. EIO — системный текст IOException из
+  `StreamTransport` («ошибка чтения/записи: …»).
+- **Разбор лога начинать с `tools/logdiag.py`**, потом `logdigest.py`. Правила общие с приложением (`tools/logdiag_rules.json`
+  → assets через `copyLogdiagRules`). **Формат строк лога — контракт:** поменял строку — поправь маркеры в JSON (ADR 0016).
+
+## Инварианты (не ломать)
+
+- **Сервер AA 5277 одноразовый.** Грязный обрыв или голый TCP connect/close его глушат, перезапустить его приложение не может.
+  Закрывать только через ByeBye; новую AA-сессию — после полного закрытия старой; живую AA не рвать из-за смены режима/DPI
+  (новый режим — после ручного перезапуска сервера). `AaServerCheck`/`AaProbe` не запускать при живом мосте. ADR 0003.
+- **Потеряли видеокадр — P-кадры не слать**, ждать IDR (запрос IDR не чаще раза в 1,5 с).
+- **Весь H.264 в ГУ — через `AnnexB.fixSps`**: SPS от Exynos ГУ не принимают.
+- **CAR_DATA_START не слать вслепую.** В коде его сейчас нет вообще; слепой START вешал видео на Vezel. Только по RSP
+  и только объявленным модулям (ADR 0010).
+- **Пакеты в ГУ ≤ 16 КиБ** (`Wire.CHUNK`), у части ГУ ещё меньше (ADR 0009).
+- **Флаги `hu*` сбрасываются в `attach()`.**
+- **Состояние `BridgeService` трогает только главная нить**, колбэки с других нитей — через `main.post`.
+- Кроп-режимы в пробросе работают только через SPS-кроп (`spsCropable`), иначе откат на R720.
+- **Свой хост Car App: visible ≠ stable** (иначе 2ГИС прячет лимит, камеры, мини-карту), одна полноэкранная поверхность
+  с вырезкой, сначала onSurfaceDestroyed, потом отвязка. ADR 0021. В хост идёт только навигатор с включёнными
+  «Подсказками на приборке», иначе окном; теневая AA - тоже только при них. ADR 0028.
+- **Хосту нужен свой `android.car.permission.TEMPLATE_RENDERER`** в манифесте (объявить и запросить), иначе навигаторы
+  со списком хостов (Яндекс) отвечают «Unknown host» на рукопожатии. ADR 0022.
+- **Android 17: экран рабочего стола создаёт shell-хост VirtualDevice** (`dex/VdmHostMain`, uid 2000) через
+  `VdmHostLink`; без хоста экран уходит в группу 0 и гаснет с телефоном. Хост живёт в группе adbd и гибнет при каждой смене
+  USB-режима; `VdmHostRestart` поднимает его через свою беспроводную отладку, для этого на 17 нужна «Отладка по USB» (требуем только на Samsung). ADR 0033.
+- Пароли, SSID, ключи в лог не пишутся.
+- Рубильники экспериментов в companion `AaBridgeCore`: `PAUSE_KEEPALIVE_ENABLED`, `NAVI_STATUS_ENABLED`,
+  `MODULE_MUSIC_ENABLED`, `ROUTE_NAVI_STATUS_ENABLED`, `AIR_WARM_RESUME_ENABLED`.
+
+## Симптом → куда смотреть
+
+| Симптом | Куда |
+|---|---|
+| EIO через секунды после PAUSE | heartbeat на PAUSE: `CarLifeSession.pauseHeartbeat`, флаг `huVw20082120`; ADR 0007 |
+| EIO сразу после крупного IDR | `IdrBitrateCeiling`, потолки по каналу; ADR 0008 |
+| Рабочий стол: кнопка голоса молчит / Алиса не в панели | `AaBridgeCore.phoneAssistant` → `DesktopKeys.voice` → `LauncherActions.toggleAssistant`, слот `EmbedHost.alice`; запасной `dex/PhoneAssistant`; в логе `ASSIST`, `EMBED alice`; ADR 0026 |
+| Маршрут от Алисы не в плитке / висит на телефоне | `LauncherActions.assistantOpened`, `carapp/RouteIntent`, `CarAppSession.newIntent` (повторный getTemplate), `PhoneAssistant.closePhoneTasks`; в логе `ASSIST маршрут`, `CARAPP onNewIntent`; ADR 0026 |
+| «Алиса только голосом»: молчит на блокировке / плашка врёт | `LauncherActions.voiceOnly` (скрытый слот `alice`, слой 1×1, `assistantHidden`), `PhoneAssistant.watch` (перенос MainActivity Яндекса), `launcher/AliceVoice` (состояния по микрофону, речи и `DesktopAudioState.level`), `AliceVoiceUi`; в логе `ASSIST скрытая`, `ASSIST плашка`; ADR 0034 |
+| Gemini голосом: молчит / маршрут или музыка не туда | `LauncherActions.voiceOnly` (`gemini()`: нет Яндекса → KEYCODE_VOICE_ASSIST через `DesktopKeys.injectKey`), `PhoneAssistant.watchPhone` (Google Карты → `RouteIntent.googleMapsDir`, YouTube Music → `musicFromGemini`), голос USAGE_ASSISTANT в `DesktopAudioLoopback`; в логе `ASSIST Gemini`, `ASSIST YouTube Music`, `ASSIST маршрут`; ADR 0035 |
+| USB встаёт после большого пакета | нарезка `Wire.CHUNK`, `huMazda20622111`; ADR 0009 |
+| Чёрный экран после камеры заднего хода | свой IDR (`IdrSplice`); ADR 0005 |
+| Поля, растянуто, не тот размер | `VideoMode`, `SpsCrop`, VIDEO_ENCODER_INIT в логе |
+| AA не подключается, `нет VERSION_RESPONSE` | сервер 5277 заглох: ADR 0003; база кейсов (память `hu/`) |
+| Обрывы по воздуху | `MultiSocketTransport`, `P2pJoin`, `CarNetwork`, строки `WL`; VPN рвёт сокеты |
+| Звук молчит / приглушён | `AaAudio`, AUDIO_TRANSMISSION_MODE, TTS_STOP; источник на ГУ |
+| Нет подсказок на приборке | подписка ГУ, `MetaRelay.sendNaviTurn`, `HondaClusterRoad` |
+| Текст на ГУ не на языке интерфейса | заглушка: `DelegatedDexConnector.text()` (`desk_ph_*`, `desk_err_*`), режим AA — тексты `AaBridgeCore` из `BridgeService` (`aa_ph_*`); язык — `AppLocale` |
+| Автотест стенда падает | `out/autotest-*/<язык>/`: `steps/`, `fail/*-diff.png`, `actions.log`; «обрезан многоточием» — баг вёрстки; README `pc-headunit/autotest` |
+| Клавиатура на ГУ разделена пополам | плотность рабочего стола `DesktopGeometryPolicy.density` (короткая сторона < 600 dp), ADR 0023 |
+| Главный: не та раскладка, плашка не листается «Слоями», ⇄ не там | prefs `home_layout`/`card_view`/`small_view` → `LauncherModel.tiles`, что листают «Слои» - prefs `layer_list` (`Layer`/`LayerList` в `HomeTilesLogic.kt`, настройки «Экран» → `LayersCard` и выбор по «+» `LayerPickerScreen` в `LayersUi.kt`; приложение плашки - prefs `tile_app`, окно по `appCardRect`, ADR 0030), правила в `HomeTilesLogic`, окна плашек в `EmbedUi.EmbedLayers` (плашка-приложение - слот app по `appCardRect`), ⇄ и «Слои» ленты - `HomeTileButtons`, ADR 0027 |
+| Рабочий стол не того цвета / золото там, где должен быть свой акцент | prefs `colors_night`/`colors_day` → `LauncherModel.palette` → `LauncherColors.palette` (набор по умолчанию = `Palettes.DARK/LIGHT`), акцент - `LocalAccent` = `LauncherPalette.accent`; страница `SettingsPage.COLORS`; ADR 0036 |
+| Шайба/кнопки ГУ не действуют в своём лаунчере | `DelegatedDexConnector.sendRotary/sendKey` → `DesktopKeys.sink` → `launcher/LauncherKnob` (фокус в `Pressable`), коды в `KnobLogic`, ADR 0024; в окне на всю область - `LauncherKnob.toWindow` → `EmbedHost.key` → `injectChildKey`, в логе `LAUNCHER шайба: клавиши идут в окно`, ADR 0037 |
+| Рабочий стол: громкость двумя пальцами не работает | `VolumeSwipe` (зона 30% справа, шаг 1/12 высоты) в `AaBridgeCore.onCarlifeTouch`, тумблер `AaPrefs.volumeSwipe` / `huHondaVezel`, `DesktopMediaControl.adjustVolume`; в логе `жест громкости`, `BRIDGE громкость`; ADR 0038 |
+| 2ГИС на рабочем столе: нет лимита/камер, заставка висит, «Перезапустите 2ГИС» | `carapp/CarAppSession` (области, порядок stop), кнопка «Перезапустить навигатор»; ADR 0021 |
+| Навигатор окном вместо хоста, в логе `handshake: отказ ... Unknown host` | TEMPLATE_RENDERER в манифесте; ADR 0022 |
+| Я.Карты/Навигатор просят Плюс, или навигатор окном без подсказок | настройка «Подсказки на приборке» (prefs `nav_hints:<pkg>`, по умолчанию выкл у всех) → `CarAppHost.allowFor` в `EmbedHost.carTargetFor`; теневая AA - `NavigatorPick.shadowWanted`; ADR 0028 |
+| Android 17: экран ГУ гаснет с телефоном, в логе `группа=0`, `VDM хост завершился` | отладка по USB (`adb_enabled=0`), `VdmHostLink`/`VdmHostRestart`, строки `VDM` и `VDMHOST`; ADR 0033 |
+| Навигатор в хосте: голая карта, нет кнопок/списка | шаблон не разобран (`CarUi.Unknown`): `carapp/CarUiMapper.map`, `cmd car_dump` |
+| Мерцание яркости/контраста, «дышит» картинка | `BitratePolicy`/`DesktopVideoQuality` (8 Мбит/с на Wi-Fi), `IdrSplice` (очередь), ADR 0039; в логе `битрейт энкодера`, `бэклог`, `свой IDR ... не принят` |
+| Тач мимо / рывками | `VideoGeometry.mapTouch`, `TouchDecimator`, `TouchPacer` |
+
+Конкретные машины и прошлые разборы — база кейсов ГУ в памяти Claude (`memory/hu/INDEX.md`, вне репо: там данные
+пользователей).

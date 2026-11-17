@@ -1,0 +1,189 @@
+package com.yegorkapomidorka.headswap.carapp
+
+import androidx.car.app.navigation.model.Maneuver
+import com.yegorkapomidorka.headswap.aa.AaMeta
+import org.junit.Assert.*
+import org.junit.Test
+
+class CarAppLogicTest {
+    @Test fun areasKeepCardsOutOfVisibleAndButtonsOutOfStable() {
+        val (visible, stable) = CarAreas.of(1136, 720, leftPx = 440, rightPx = 120, topPx = 0)
+        assertEquals(Box(440, 0, 1016, 720), visible)
+        assertEquals(Box(440, 108, 1016, 720), stable)
+    }
+
+    @Test fun visibleNeverEqualsStableEvenWithoutButtons() {
+        // без кнопок и карточек 2ГИС прячет спидометр, камеры и мини-карту - stable обязан отличаться
+        for ((l, r, t) in listOf(Triple(0, 0, 0), Triple(300, 0, 0), Triple(0, 0, -5), Triple(5000, 5000, 5000))) {
+            val (visible, stable) = CarAreas.of(712, 501, l, r, t)
+            assertNotEquals("l=$l r=$r t=$t", visible, stable)
+            assertTrue(stable.width > 0 && stable.height > 0)
+            assertTrue(stable.left >= visible.left && stable.right <= visible.right && stable.top >= visible.top)
+        }
+        assertEquals(75, CarAreas.of(712, 501, 0, 0, 0).second.top)
+    }
+
+    @Test fun defaultAreasMatchTheProbe() {
+        val (visible, stable) = CarAreas.default(712, 501)
+        assertEquals(Box(256, 0, 641, 501), visible)
+        assertEquals(Box(256, 75, 641, 501), stable)
+    }
+
+    @Test fun cardShowsCenterCropAndAreasFollowIt() {
+        val crop = CarAreas.crop(1136, 720, 712, 501)
+        assertEquals(Box(212, 109, 924, 610), crop)
+        val (visible, stable) = CarAreas.of(crop, 0, 0, 0)
+        assertEquals(crop, visible)
+        assertEquals(Box(212, 109 + 75, 924, 610), stable)
+        assertEquals(Box(0, 0, 1136, 720), CarAreas.crop(1136, 720, 1500, 800))
+    }
+
+    @Test fun tileCardsShrinkOrSpanNarrowTile() {
+        // 1280x720, 4 плашки: большая 712 px, карточка прибытия 540 - слева, уменьшенная до 55 % ширины
+        val (big, bigNarrow) = CarTileFit.scale(712, 540, 21)
+        assertFalse(bigNarrow)
+        assertEquals(0.725f, big, 0.001f)
+        // малая плашка 2:1 (356 px): слева вышло бы мельче 0,6 - на всю ширину, ровно с отступами
+        val (small, smallNarrow) = CarTileFit.scale(356, 540, 21)
+        assertTrue(smallNarrow)
+        assertEquals(356f, small * (540 + 2 * 21), 0.5f)
+        // широкая плашка 1920x720 и «Масштаб карты» помельче - без увеличения
+        assertEquals(1f to false, CarTileFit.scale(1318, 660, 21))
+        assertEquals(1f to false, CarTileFit.scale(712, 360, 14))
+        assertEquals(1f to false, CarTileFit.scale(0, 540, 21))
+    }
+
+    @Test fun touchInCardGoesToItsCrop() {
+        val crop = CarAreas.crop(1136, 720, 712, 501)
+        assertEquals(212f to 109f, CarAreas.touch(0f, 0f, 712, 501, 1136, 720, crop))
+        assertEquals(212f + 356f to 109f + 250f, CarAreas.touch(356f, 250f, 712, 501, 1136, 720, crop))
+        // на весь экран окно растягивает поверхность
+        assertEquals(568f to 360f, CarAreas.touch(500f, 300f, 1000, 600, 1136, 720, null))
+    }
+
+    @Test fun emptySurfaceGivesEmptyAreas() {
+        assertEquals(Box(0, 0, 0, 0), CarAreas.of(0, 720, 10, 10, 10).first)
+    }
+
+    @Test fun dpiIsAutoTimesScaleWithinLimits() {
+        assertEquals(160, CarConfigMath.dpi(1f))
+        assertEquals(80, CarConfigMath.dpi(0.5f))
+        assertEquals(107, CarConfigMath.dpi(2f / 3f))
+        assertEquals(160, CarConfigMath.dpi(0f))
+        assertEquals(CarConfigMath.MAX_DPI, CarConfigMath.dpi(5f))
+        assertEquals(CarConfigMath.MIN_DPI, CarConfigMath.dpi(0.1f))
+        assertEquals(757, CarConfigMath.dp(1136, 240))
+        assertEquals(0, CarConfigMath.dp(1136, 0))
+    }
+
+    @Test fun pickSkipsOwnPackageAndKeepsFirstServicePerPackage() {
+        val a = CarAppTarget("ru.dublgis.dgismobile", "ru.dublgis.car.CarService", 1, null)
+        val b = CarAppTarget("ru.dublgis.dgismobile", "other.Service", 1, null)
+        val own = CarAppTarget("com.yegorkapomidorka.headswap", "x.Y", 1, null)
+        val picked = CarAppPick.targets(listOf(a, b, own), "com.yegorkapomidorka.headswap")
+        assertEquals(mapOf(a.pkg to a), picked)
+    }
+
+    @Test fun apiLevelIsAppLatestCappedByHost() {
+        assertEquals(7, CarAppPick.apiLevel(4, 7, 8))
+        assertEquals(8, CarAppPick.apiLevel(4, 9, 8))
+        assertEquals(4, CarAppPick.apiLevel(4, null, 8))
+        assertNull(CarAppPick.apiLevel(9, 9, 8))
+        assertEquals(1, CarAppPick.apiLevel(null, null, 8))
+    }
+
+    @Test fun verdictHoldsUntilVersionChanges() {
+        val v = CarAppVerdicts()
+        val t = CarAppTarget("ru.yandex.yandexnavi", "S", 10, null)
+        assertNull(v.refusal(t))
+        v.refuse(t, CarAppRefusal.HANDSHAKE)
+        assertEquals(CarAppRefusal.HANDSHAKE, v.refusal(t))
+        assertNull(v.refusal(t.copy(versionCode = 11)))
+        v.clear(t.pkg)
+        assertNull(v.refusal(t))
+    }
+
+    @Test fun distanceUnitsToMeters() {
+        assertEquals(50, CarTrip.meters(50.0, CarTrip.UNIT_METERS))
+        assertEquals(1200, CarTrip.meters(1.2, CarTrip.UNIT_KILOMETERS_P1))
+        assertEquals(1609, CarTrip.meters(1.0, CarTrip.UNIT_MILES))
+        assertEquals(30, CarTrip.meters(100.0, CarTrip.UNIT_FEET))
+    }
+
+    @Test fun maneuverTypesToCarLifeTurns() {
+        assertEquals(AaMeta.T_LEFT, CarTrip.turnFor(Maneuver.TYPE_TURN_NORMAL_LEFT))
+        assertEquals(AaMeta.T_RIGHT, CarTrip.turnFor(Maneuver.TYPE_TURN_NORMAL_RIGHT))
+        assertEquals(AaMeta.T_RING, CarTrip.turnFor(Maneuver.TYPE_ROUNDABOUT_ENTER_AND_EXIT_CW))
+        assertEquals(AaMeta.T_DEST, CarTrip.turnFor(Maneuver.TYPE_DESTINATION_LEFT))
+        assertEquals(AaMeta.T_FRONT, CarTrip.turnFor(Maneuver.TYPE_STRAIGHT))
+        assertEquals(AaMeta.T_FRONT, CarTrip.turnFor(Maneuver.TYPE_UNKNOWN))
+    }
+
+    @Test fun tapIsClickDragIsScroll() {
+        val t = CarTouch()
+        assertNull(t.feed(0, 100f, 100f))
+        assertNull(t.feed(2, 105f, 104f))
+        assertEquals(CarTouch.Click(106f, 104f), t.feed(1, 106f, 104f))
+
+        assertNull(t.feed(0, 100f, 100f))
+        assertEquals(CarTouch.Scroll(-20f, 0f), t.feed(2, 120f, 100f))
+        assertEquals(CarTouch.Scroll(-10f, -5f), t.feed(2, 130f, 105f))
+        assertNull(t.feed(1, 130f, 105f))
+
+        assertNull(t.feed(2, 10f, 10f))   // MOVE без DOWN
+        assertNull(t.feed(0, 1f, 1f)); assertNull(t.feed(3, 1f, 1f)); assertNull(t.feed(1, 1f, 1f))
+    }
+
+    private fun f(vararg v: Float) = v
+
+    @Test fun pinchIsScaleRelativeToPreviousEventAndNoClickAfter() {
+        val t = CarTouch()
+        assertNull(t.feed(0, 0, f(100f), f(100f)))
+        assertNull(t.feed(5, 1, f(100f, 200f), f(100f, 100f)))          // span 100
+        assertEquals(CarTouch.Scale(160f, 100f, 1.2f), t.feed(2, 0, f(100f, 220f), f(100f, 100f)))  // 120/100
+        val s = t.feed(2, 0, f(100f, 160f), f(100f, 100f)) as CarTouch.Scale                  // 60/120
+        assertEquals(0.5f, s.factor, 1e-4f)
+        assertNull(t.feed(6, 1, f(100f, 160f), f(100f, 100f)))
+        assertNull(t.feed(1, 0, f(100f), f(100f)))                       // после щипка не клик
+    }
+
+    @Test fun remainingFingerAfterPointerUpDoesNotJump() {
+        val t = CarTouch()
+        t.feed(0, 0, f(100f), f(100f))
+        t.feed(5, 1, f(100f, 300f), f(100f, 100f))
+        t.feed(2, 0, f(100f, 320f), f(100f, 100f))
+        assertNull(t.feed(6, 0, f(100f, 320f), f(100f, 100f)))           // поднят первый, остался (320,100)
+        assertNull(t.feed(2, 0, f(325f), f(100f)))                       // в пределах SLOP от оставшегося
+        assertEquals(CarTouch.Scroll(-25f, 0f), t.feed(2, 0, f(345f), f(100f)))  // от (320,100), без рывка к 100
+    }
+
+    @Test fun secondFingerOnTopOfFirstWaitsForRealSpan() {
+        val t = CarTouch()
+        t.feed(0, 0, f(100f), f(100f))
+        assertNull(t.feed(5, 1, f(100f, 100f), f(100f, 100f)))           // жестовый режим: палец в той же точке
+        assertNull(t.feed(2, 0, f(100f, 150f), f(100f, 100f)))           // первая настоящая дистанция - якорь
+        assertEquals(CarTouch.Scale(137.5f, 100f, 1.5f), t.feed(2, 0, f(100f, 175f), f(100f, 100f)))
+    }
+
+    @Test fun doubleTapZoomsInOnlyWithinTimeAndDistance() {
+        var clock = 1000L
+        val t = CarTouch { clock }
+        t.feed(0, 50f, 50f); assertEquals(CarTouch.Click(50f, 50f), t.feed(1, 50f, 50f))
+        clock += 200
+        t.feed(0, 55f, 52f); assertEquals(CarTouch.Scale(55f, 52f, CarTouch.DOUBLE_TAP_ZOOM), t.feed(1, 55f, 52f))
+        clock += 200                                                       // третий тап - снова обычный клик
+        t.feed(0, 55f, 52f); assertEquals(CarTouch.Click(55f, 52f), t.feed(1, 55f, 52f))
+        clock += 500                                                       // поздно
+        t.feed(0, 55f, 52f); assertEquals(CarTouch.Click(55f, 52f), t.feed(1, 55f, 52f))
+        clock += 100                                                       // далеко
+        t.feed(0, 300f, 52f); assertEquals(CarTouch.Click(300f, 52f), t.feed(1, 300f, 52f))
+    }
+
+    @Test fun cancelDropsPinch() {
+        val t = CarTouch()
+        t.feed(0, 0, f(100f), f(100f))
+        t.feed(5, 1, f(100f, 200f), f(100f, 100f))
+        assertNull(t.feed(3, 0, f(100f, 200f), f(100f, 100f)))
+        assertNull(t.feed(2, 0, f(100f, 300f), f(100f, 100f)))           // MOVE после CANCEL - мимо
+    }
+}

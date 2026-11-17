@@ -1,0 +1,231 @@
+package com.yegorkapomidorka.headswap.launcher
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class LauncherSpecTest {
+    /** Спека с 12 ч не равна спеке с 24 ч: иначе remember в LauncherRoot не перестраивает рейку и «—AM—» залипает. */
+    @Test fun twelveHourChangesSpecEquality() {
+        val a = LauncherSpecs.forSize(1280, 720, RailSize.MEDIUM, twelveHour = false)
+        val b = LauncherSpecs.forSize(1280, 720, RailSize.MEDIUM, twelveHour = true)
+        assertFalse(a == b)
+        assertFalse(a.clockAmPm)
+        assertTrue(b.clockAmPm)
+        assertTrue(b.amPmInline)
+    }
+
+    @Test fun normalRailTwelveHourReservesAmPmLine() {
+        val a = LauncherSpecs.forSize(1280, 720, RailSize.NORMAL, twelveHour = false)
+        val b = LauncherSpecs.forSize(1280, 720, RailSize.NORMAL, twelveHour = true)
+        assertTrue(b.clockRailAmPm)
+        assertEquals(a.clockH + b.clockGap + b.amPmPillH, b.clockH)
+    }
+
+    /** «—PM—» одной строкой влезает в «Среднюю» рейку на всех экранах таблицы. */
+    @Test fun amPmInlineFitsOnAllLandscapeSizes() {
+        for (row in LauncherSpecs.TABLE) {
+            val s = LauncherSpecs.forSize(row[0], row[1], RailSize.MEDIUM, twelveHour = true)
+            assertTrue("${row[0]}x${row[1]}", !s.clockAmPm || s.amPmInline)
+        }
+    }
+    @Test fun tableRowsComeBackExactly() {
+        for (row in LauncherSpecs.TABLE) {
+            val s = LauncherSpecs.forSize(row[0], row[1])
+            assertEquals("${row[0]}x${row[1]}", listOf(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]),
+                listOf(s.w, s.h, s.t, s.g, s.m, s.f1, s.f2, s.f3))
+        }
+    }
+
+    @Test fun derivedValuesFollowMockup() {
+        val s = LauncherSpecs.forSize(1920, 720)
+        assertEquals(135, s.rail)
+        assertEquals(132, s.bottomH) // T + 2G
+        assertEquals(132, s.navH) // блок навигации - одна полоса с нижним рядом
+        assertEquals(18, s.radius)
+        assertEquals(40, s.ic)
+        assertEquals(54, s.icBig)
+        assertEquals(81, s.appIc)
+        assertEquals(571, s.music) // (1920 - 135 - 21 - 29 - 21) / 3
+        assertEquals(571, s.phone)
+        assertEquals(36, s.statusH)
+        assertEquals(96, LauncherSpecs.forSize(1280, 720).t)
+    }
+
+    @Test fun railFollowsMockup() {
+        val s = LauncherSpecs.forSize(1920, 720)
+        assertEquals(90, s.rb) // все кнопки рейки по T, пока влезают
+        assertEquals(40, s.ric)
+        assertEquals(58, s.logoIn)
+        assertEquals(54, s.backIc) // белый шеврон 54 px на 1920x720
+        // 1280x480: три кнопки, рейка сжата по высоте
+        val strip = LauncherSpecs.forSize(1280, 480)
+        assertEquals(106, strip.navH)
+        assertEquals(88, strip.rb)
+        assertEquals(40, strip.ric)
+        for (row in LauncherSpecs.TABLE) {
+            val r = LauncherSpecs.forSize(row[0], row[1])
+            assertTrue("${row[0]}x${row[1]}", r.rb in 1..r.t && r.ric <= r.ic && r.backIc <= r.rb)
+        }
+    }
+
+    @Test fun railButtonsFitForEverySize() {
+        for (row in LauncherSpecs.TABLE) for (size in RailSize.entries) {
+            val s = LauncherSpecs.forSize(row[0], row[1], size)
+            val free = s.h - s.navH - s.g - (s.g + s.g8)
+            assertTrue("${row[0]}x${row[1]} $size", s.clockH + s.railButtons * s.rb + s.railButtons * s.g4 <= free)
+            assertTrue("${row[0]}x${row[1]} $size", s.rb in 1..s.t && s.rail > 0 && s.narrow > 0)
+        }
+    }
+
+    @Test fun railWidthBySize() {
+        val g4 = LauncherSpecs.forSize(1920, 720).g4
+        assertEquals(135, LauncherSpecs.forSize(1920, 720, RailSize.NORMAL).rail)
+        assertEquals(95, LauncherSpecs.forSize(1920, 720, RailSize.MEDIUM).rail)
+        val small = LauncherSpecs.forSize(1920, 720, RailSize.SMALL)
+        assertEquals(Math.round(90 * 0.62).toInt() + 2 * maxOf(4, Math.round(g4 * 0.8).toInt()), small.rail)
+        assertTrue(small.clockInStatus && !small.clockInRail && small.clockH == 0)
+        assertTrue(LauncherSpecs.forSize(1920, 720, RailSize.MEDIUM).clockStacked)
+        // без выбора - как раньше
+        assertEquals(LauncherSpecs.forSize(1920, 720), LauncherSpecs.forSize(1920, 720, RailSize.NORMAL))
+        assertFalse(LauncherSpecs.forSize(1920, 720) == small)
+    }
+
+    @Test fun cutOnlyOnShortScreens() {
+        // выше 500 «Обрезанная» ведёт себя как «Маленькая»
+        val cut = LauncherSpecs.forSize(1280, 720, RailSize.CUT)
+        val small = LauncherSpecs.forSize(1280, 720, RailSize.SMALL)
+        assertFalse(cut.h480)
+        assertEquals(small.rail, cut.rail)
+        assertEquals(small.rb, cut.rb)
+        // 800x480: кнопка по 0.8 T
+        val low = LauncherSpecs.forSize(800, 480, RailSize.CUT)
+        assertTrue(low.h480)
+        assertEquals(Math.round(62 * 0.8).toInt(), low.rb)
+    }
+
+    @Test fun cardViewInRailForNarrowRailInStrip() {
+        assertTrue(LauncherSpecs.forSize(1280, 480, RailSize.SMALL).cardViewInRail)
+        assertTrue(LauncherSpecs.forSize(1280, 480, RailSize.CUT).cardViewInRail)
+        assertEquals(4, LauncherSpecs.forSize(1280, 480, RailSize.SMALL).railButtons)
+        assertFalse(LauncherSpecs.forSize(1280, 480, RailSize.NORMAL).cardViewInRail)
+        assertFalse(LauncherSpecs.forSize(1280, 480, RailSize.MEDIUM).cardViewInRail)
+        assertEquals(3, LauncherSpecs.forSize(1280, 480, RailSize.MEDIUM).railButtons)
+        assertTrue(LauncherSpecs.forSize(1920, 720, RailSize.NORMAL).cardViewInRail)
+    }
+
+    @Test fun railSizeRestoresUnknownAsNormal() {
+        assertEquals(RailSize.CUT, RailSize.restore("CUT"))
+        assertEquals(RailSize.NORMAL, RailSize.restore("bogus"))
+        assertEquals(RailSize.NORMAL, RailSize.restore(null))
+    }
+
+    @Test fun foreignBarFollowsRailButton() {
+        assertEquals(90, LauncherSpecs.forSize(1920, 720).barH)
+        assertEquals(88, LauncherSpecs.forSize(1280, 480).barH)
+        assertEquals(62, LauncherSpecs.forSize(800, 480).barH)
+        for (row in LauncherSpecs.TABLE) {
+            val s = LauncherSpecs.forSize(row[0], row[1])
+            // панель не выше пятой части экрана и не ниже цели касания рейки, иконка влезает
+            assertTrue("${row[0]}x${row[1]}", s.barH in 60..110 && s.barH == s.rb && s.barIc < s.barH && s.barH * 10 <= s.h * 2)
+        }
+    }
+
+    @Test fun musicChipAndTransportFollowMockup() {
+        val s = LauncherSpecs.forSize(1920, 720)
+        assertEquals(65, s.pcB)
+        assertEquals(33, s.pcIc)
+        assertEquals(26, s.pcVk)
+        assertEquals(70, s.tp)
+        assertEquals(34, s.tpIc)
+        assertEquals(109, s.titleB)
+        assertEquals(17, s.tag)
+    }
+
+    @Test fun gridIsOneToTwo() {
+        val vezel = LauncherSpecs.forSize(1600, 900) // масштаб строки 1920x1080
+        assertEquals(83, vezel.t)
+        assertEquals(125, vezel.rail)
+        assertEquals(470, vezel.music)
+        assertEquals(470, vezel.phone)
+        assertEquals(83, vezel.rb)
+        assertEquals(220, LauncherSpecs.forSize(800, 480).music)
+        assertEquals(356, LauncherSpecs.forSize(1280, 720).phone)
+    }
+
+    @Test fun compactPhoneByFormula() {
+        // на текст меньше 15 * F2 * 0.55
+        val compact = setOf("1280x720", "1280x640", "1024x600", "800x480")
+        for (row in LauncherSpecs.TABLE) {
+            val s = LauncherSpecs.forSize(row[0], row[1])
+            if (s.strip) continue
+            assertEquals("${row[0]}x${row[1]}", "${row[0]}x${row[1]}" in compact, s.phoneCompact)
+        }
+    }
+
+    @Test fun stripOnlyForShortWideScreens() {
+        assertTrue(LauncherSpecs.forSize(1280, 480).strip)
+        assertFalse(LauncherSpecs.forSize(800, 480).strip)
+        assertFalse(LauncherSpecs.forSize(1280, 640).strip)
+        assertEquals(278, LauncherSpecs.forSize(1280, 480).music) // 290/96 T при T 92: обложка по колонке настроек (08.11)
+        assertEquals(92 * 5 - 21, LauncherSpecs.forSize(1280, 480).phone) // только для оверлея входящего
+    }
+
+    @Test fun quickAppsFourPlusAddOrFiveInStrip() {
+        assertEquals(4, LauncherSpecs.forSize(800, 480).quickApps)
+        assertEquals(4, LauncherSpecs.forSize(1920, 720).quickApps)
+        assertEquals(5, LauncherSpecs.forSize(1280, 480).quickApps)
+    }
+
+    @Test fun portraitOnlyForTallScreens() {
+        for (row in LauncherSpecs.PORTRAIT_TABLE) {
+            val s = LauncherSpecs.forSize(row[0], row[1])
+            assertTrue("${row[0]}x${row[1]}", s.portrait)
+            assertEquals(listOf(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]),
+                listOf(s.w, s.h, s.t, s.g, s.m, s.f1, s.f2, s.f3))
+        }
+        assertTrue(LauncherSpecs.forSize(960, 1152).portrait)
+        assertTrue(LauncherSpecs.forSize(720, 1280).portrait)
+        for (row in LauncherSpecs.TABLE) assertFalse("${row[0]}x${row[1]}", LauncherSpecs.forSize(row[0], row[1]).portrait)
+        // почти квадратная горизонталь остаётся горизонталью и берёт строку из горизонтальной таблицы
+        assertFalse(LauncherSpecs.forSize(1138, 960).portrait)
+    }
+
+    @Test fun portraitSizesFollowMockup() {
+        val s = LauncherSpecs.forSize(960, 1152)
+        assertEquals(96, s.t)
+        assertEquals(116, s.bottomRailH) // T + G
+        assertEquals(144, s.rail) // блок навигации
+        assertEquals(250, s.musicH)
+        assertEquals(210, s.musicCover)
+        assertEquals(116, s.bottomRowH)
+        assertEquals(221, s.phone)
+        assertEquals(88, s.volBtn)
+        assertEquals(96, s.rb)
+        assertTrue(s.clockInStatus)
+        assertFalse(s.clockInRail)
+        assertFalse(s.clockStacked)
+        assertTrue(s.cardViewInRail)
+        assertTrue(s.phoneCompact)
+        assertEquals(s.g, s.padEnd)
+        // 960x1138 (запрос ГУ) берёт ту же строку, масштабированную по высоте
+        val hu = LauncherSpecs.forSize(960, 1138)
+        assertTrue(hu.portrait)
+        assertTrue(hu.t in 95..96)
+        // горизонталь не меняется
+        val land = LauncherSpecs.forSize(1280, 720)
+        assertEquals(land.m, land.padEnd)
+        assertEquals(land.m, land.padBottom)
+    }
+
+    @Test fun unknownSizeScalesFromNearest() {
+        val s = LauncherSpecs.forSize(1920, 800)
+        assertTrue(s.t in 60..120)
+        assertTrue(s.rail > 0 && s.music > 0)
+        // больше таблицы - крупнее цель касания
+        assertTrue(LauncherSpecs.forSize(3840, 1440).t > 110)
+        // меньше любой строки таблицы не падает в ноль
+        assertTrue(LauncherSpecs.forSize(320, 200).t >= 1)
+    }
+}

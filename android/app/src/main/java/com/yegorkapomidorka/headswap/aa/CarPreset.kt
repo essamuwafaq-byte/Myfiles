@@ -1,0 +1,102 @@
+package com.yegorkapomidorka.headswap.aa
+
+import com.yegorkapomidorka.headswap.R
+
+/** Настройки моста, которые выставляет выбор машины в разделе «Мой автомобиль». */
+data class CarSettings(
+    val transcode: Boolean = false,
+    val videoMode: VideoMode = VideoMode.DEFAULT,
+    val aaDensity: Int = AaDensity.AUTO,
+    val fps: FpsSetting = FpsSetting.DEFAULT,
+    val musicRate: MusicRate = MusicRate.DEFAULT,
+    /** null = пресет не задаёт частоту рабочего стола, ручную настройку не трогаем. */
+    val desktopFps: FpsSetting? = null,
+    /** CR-V 2026: финальный H.264 в limited range — иначе ГУ мерцает яркостью. */
+    val limitedRange: Boolean = false,
+    /** CR-V 2026: фиксированный пейсер 30 fps, «Авто» до 30 и потолок 6 Мбит/с на Wi-Fi без роста. */
+    val crvDesktopPacing: Boolean = false,
+)
+
+/** Корейские ГУ слабые: на 30 кадрах и 48 кГц рвут USB, советуем 32 кГц (h139, h218, h260); кадры «Авто» как у всех. */
+private val KOREAN = CarSettings(musicRate = MusicRate.HZ32)
+
+/**
+ * Подтверждённые машины (README, «Совместимость») и проверенные сообществом настройки для каждой.
+ * Выбор машины разом пишет [settings] в AaPrefs, дальше любую настройку можно поменять вручную.
+ * Всем машинам одинаково: прямой проброс и кадры «Авто» (по умолчанию 1280×720, у машин с особым экраном - своё разрешение), музыка «Авто»; отдельные значения только проверенные живьём.
+ * Исключения - Elantra 7: перекодирование и 15 кадров; CR-V 2026/Hybrid: перекодирование и 30 кадров (h72, логи 05–10.11);
+ * Tucson NX4c: перекодирование (вертикальный кадр с полями по обеим осям).
+ * Особенности ГУ, которые мост определяет сам (Hyundai CN7 - музыка 32 кГц в «Авто», VW ID - потолок битрейта), здесь не дублируются.
+ * Имя элемента хранится в prefs: не переименовывать.
+ */
+enum class CarPreset(val titleRes: Int, val settings: CarSettings = CarSettings()) {
+    /** ГУ 1920×640 (h269). */
+    CITROEN_C5_X(R.string.car_citroen_c5_x, CarSettings(videoMode = VideoMode.WIDE_640)),
+    /** Экран 1024×600, слабый USB ГУ (h277): мост сам форсирует перекодирование и потолок 800 кбит/с. */
+    DONGFENG_DF6_2023(R.string.car_dongfeng_df6_2023, CarSettings(videoMode = VideoMode.R1024)),
+    PEUGEOT_5008_2024(R.string.car_peugeot_5008_2024),
+    HONDA_BREEZE_2(R.string.car_honda_breeze_2),
+    /** h243: 1920×1080, «работает достойно». */
+    HONDA_CRV_6(R.string.car_honda_crv_6, CarSettings(videoMode = VideoMode.R1080)),
+    /**
+     * SEMIDRIVE X9, экран 1920×720; на кадрах «Авто» полосы и мерцание (h72). По логам 05–10.11:
+     * 8 Мбит/с на Wi-Fi и own IDR в passthrough дают мерцание, transcode + 30 стабилен.
+     */
+    HONDA_CRV_2026(R.string.car_honda_crv_2026, CarSettings(
+        transcode = true, videoMode = VideoMode.WIDE_HD, fps = FpsSetting.FPS30, desktopFps = FpsSetting.FPS30,
+        limitedRange = true, crvDesktopPacing = true)),
+    HONDA_CRV_2026_HYBRID(R.string.car_honda_crv_2026_hybrid, CarSettings(
+        transcode = true, videoMode = VideoMode.WIDE_HD, fps = FpsSetting.FPS30, desktopFps = FpsSetting.FPS30,
+        limitedRange = true, crvDesktopPacing = true)),
+    /** Машина Егора: 1920×1080, 30 кадров. */
+    HONDA_VEZEL_2022(R.string.car_honda_vezel_2022, CarSettings(videoMode = VideoMode.R1080)),
+    /** ГУ CN7: прямой проброс моргает и гаснет (h638), канал слабый - перекодирование 1280×480 на 15 кадрах. */
+    HYUNDAI_ELANTRA_7(R.string.car_hyundai_elantra_7, KOREAN.copy(transcode = true, videoMode = VideoMode.WIDE, fps = FpsSetting.FPS15)),
+    /** HSAE, вертикальный экран: 1280×480 работает шустро (h86). */
+    HYUNDAI_IX35_2021(R.string.car_hyundai_ix35_2021, KOREAN.copy(videoMode = VideoMode.WIDE)),
+    /** Вертикальный экран 960×1280, CarLife модифицирован на весь экран, внизу климат 130 px: 960×1152 с перекодированием - без растяжения (h670). */
+    HYUNDAI_TUCSON_NX4C(R.string.car_hyundai_tucson_nx4c, KOREAN.copy(transcode = true, videoMode = VideoMode.PORTRAIT_1152)),
+    JETTA_VS(R.string.car_jetta_vs),
+    KIA_K3_2023(R.string.car_kia_k3_2023, KOREAN),
+    KIA_SPORTAGE_ACE(R.string.car_kia_sportage_ace, KOREAN),
+
+    /** Mazda Connect 2 из Китая (channel 20622111, h238/h359): ГУ просит 1280×480. */
+    MAZDA_3_CN_2025(R.string.car_mazda_3_cn_2025, CarSettings(videoMode = VideoMode.WIDE)),
+    /** Desay SV G6S: нативный экран 1728×648. */
+    MAZDA_CX5_2025(R.string.car_mazda_cx5_2025, CarSettings(videoMode = VideoMode.WIDE_MID)),
+    /** alps, CarLife 4.1: 1920×720 (h166). */
+    MAZDA_CX50(R.string.car_mazda_cx50, CarSettings(videoMode = VideoMode.WIDE_HD)),
+    /** yftech: заработало на 15 кадрах (h10, h41). */
+    MITSUBISHI_OUTLANDER_4(R.string.car_mitsubishi_outlander_4, CarSettings()),
+    SKODA_KAMIQ_GT_2021(R.string.car_skoda_kamiq_gt_2021),
+    /** CNS3 просит 2:1, 1280×640 (h292); на 1080p виснет (h305). */
+    SKODA_OCTAVIA_PRO(R.string.car_skoda_octavia_pro, CarSettings(videoMode = VideoMode.WIDE_2_1)),
+    /** HSAE 21070007, 1920×720 (h420): энкодер Xiaomi на 1920×720 падает, ГУ игнорирует кроп SPS и берёт верхние 720 строк - прямой проброс с полями снизу. */
+    TOYOTA_COROLLA_CROSS_2024(R.string.car_toyota_corolla_cross_2024, CarSettings(videoMode = VideoMode.WIDE_HD)),
+    TOYOTA_LEVIN(R.string.car_toyota_levin),
+    /** Китай 2025 и соседние годы, Desay G6SA: 1920×720 - в «Своём лаунчере» влезают все вкладки, 1280×480 крупноват (h1066). */
+    TOYOTA_RAV4_2025(R.string.car_toyota_rav4_2025, CarSettings(videoMode = VideoMode.WIDE_HD)),
+    /** Китай: 1920×1080, 30 кадров (Егор, 18.10). */
+    VW_BORA_2021(R.string.car_vw_bora_2021, CarSettings(videoMode = VideoMode.R1080)),
+    /** Мультимедиа Discover Pro 9.2 во всех моделях VW: экран 1280×640, как у Octavia Pro (запрос юзера 04.11). */
+    VW_DISCOVER_PRO_9_2(R.string.car_vw_discover_pro_9_2, CarSettings(videoMode = VideoMode.WIDE_2_1)),
+    /** 1920×1080, остальное «Авто» (Александр). */
+    VW_GOLF_8_PRO(R.string.car_vw_golf_8_pro, CarSettings(videoMode = VideoMode.R1080)),
+    /** Европейский Golf 8 R-Line: кадр 2:1 как у Octavia Pro, по воздуху в полноценном режиме (юзер, 08.11). */
+    VW_GOLF_8_R_LINE(R.string.car_vw_golf_8_r_line, CarSettings(videoMode = VideoMode.WIDE_2_1)),
+    VW_ID_UNYX(R.string.car_vw_id_unyx),
+    VW_LAMANDO_L(R.string.car_vw_lamando_l),
+    VW_SAGITAR_2021(R.string.car_vw_sagitar_2021),
+    /** MIB 2.5, экран 1280×720: всё по умолчанию, работает (Егор, 08.11). */
+    VW_TAYRON_GTE_2020(R.string.car_vw_tayron_gte_2020),
+    VW_TROC_2026(R.string.car_vw_troc_2026),
+    VW_THARU_XR(R.string.car_vw_tharu_xr),
+
+    /** VW CNS3: окно CarLife 2240×976 на экране 2240×1260. */
+    VW_TIGUAN_L_PRO(R.string.car_vw_tiguan_l_pro, CarSettings(videoMode = VideoMode.WIDE_976));
+
+    companion object {
+        /** По имени из prefs; неизвестное/пустое = машина не выбрана. */
+        fun parse(key: String?): CarPreset? = values().firstOrNull { it.name == key }
+    }
+}
