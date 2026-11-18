@@ -103,6 +103,9 @@ class CarlifeBtProbe(
      */
     fun idle(): Boolean = active == null && p2pIp == null || synchronized(lock) { running && servers.isEmpty() }
 
+    /** Идёт вход в P2P-группу ГУ: рвать Bluetooth сейчас - значит сорвать почти готовое подключение. Главная нить. */
+    fun joining(): Boolean = p2p.joining()
+
     /** stop + start: новые записи SDP, P2P по старой цели снимается. */
     fun restart(why: String) {
         stop(why)
