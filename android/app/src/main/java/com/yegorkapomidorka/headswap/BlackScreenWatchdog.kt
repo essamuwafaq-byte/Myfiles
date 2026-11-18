@@ -17,7 +17,9 @@ object BlackScreenWatchdog {
      * сам (START_FALLBACK) и шлёт кадры в никуда - экран чёрный. Toyota Levin HSAE ch 20452114 (лог 2026-11-17): в рабочих
      * сессиях START приходит через 1-1,6 с после INIT, в чёрной не пришёл за 2 мин при 29 fps в ГУ.
      */
-    const val NO_HU_START_MS = 12_000L
+    // замер по 10 сессиям 2026-11-17/18: START приходит через 0,15-1,6 с после INIT_DONE (INIT_DONE ~0,65 с от старта сессии).
+    // 12 с давали ~20 с чёрного экрана (лог 18:22), 5 с - запас в 2 раза к худшему
+    const val NO_HU_START_MS = 5_000L
     /** Пока ГУ не прислала START, напоминаем ей FOREGROUND с таким шагом. */
     const val FOREGROUND_NUDGE_MS = 3_000L
     /** После START (или возврата с PAUSE) ни одного кадра AA. */
@@ -68,6 +70,10 @@ object BlackScreenWatchdog {
     /** Пауза перед новой попыткой после срабатывания: всегда [RETRY_MS], попытки не кончаются. */
     const val RETRY_MS = 5_000L
 
+    /** ГУ не вывела CarLife: она уже на связи и переподключается сама за ~1,5 с, ждём ГУ заново почти сразу. */
+    const val QUICK_RETRY_MS = 1_500L
+
     @Suppress("UNUSED_PARAMETER")
-    fun rearmDelayMs(consecutive: Int): Long = RETRY_MS
+    fun rearmDelayMs(consecutive: Int, reason: String = ""): Long =
+        if (reason == Verdict.NO_HU_START.reason) QUICK_RETRY_MS else RETRY_MS
 }

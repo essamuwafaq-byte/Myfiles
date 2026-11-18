@@ -1577,7 +1577,7 @@ class BridgeService : Service() {
         if (wifiBMode && !stopRequested) {
             // беспровод: ГУ ушла (обрыв Wi-Fi, выключили машину) - снова маяк и ожидание, AA пока тёплая (grace)
             CarLifeState.wireless = getString(R.string.wl_state_lost)
-            val delay = if (watchdog) BlackScreenWatchdog.rearmDelayMs(watchdogStreak) else WIFI_B_REARM_MS
+            val delay = if (watchdog) BlackScreenWatchdog.rearmDelayMs(watchdogStreak, reason) else WIFI_B_REARM_MS
             WLog.ev(WLog.LINK, "rearm", "after" to reason, "streak" to watchdogStreak, "delayMs" to delay)
             if (watchdog && watchdogStreak >= 2 && btProbe.idle()) btProbe.restart("watchdog")      // свежий SDP: ГУ заново по Bluetooth
             main.postDelayed({

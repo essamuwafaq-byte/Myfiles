@@ -86,7 +86,7 @@ class BlackScreenWatchdogTest {
         val streaming = t0 + BlackScreenWatchdog.NO_HU_START_MS - 1
         assertNull(check(streaming, start = selfStart, first = selfStart + 700, last = streaming, huStart = 0))
         assertEquals(Verdict.NO_HU_START,
-            check(t0 + BlackScreenWatchdog.NO_HU_START_MS, start = selfStart, first = selfStart + 700, last = t0 + 11_990, huStart = 0))
+            check(t0 + BlackScreenWatchdog.NO_HU_START_MS, start = selfStart, first = selfStart + 700, last = t0 + 4_990, huStart = 0))
     }
 
     @Test
@@ -98,5 +98,6 @@ class BlackScreenWatchdogTest {
     @Test
     fun retriesEveryFiveSecondsForever() {
         for (n in listOf(1, 2, 3, 10, 500)) assertEquals(5_000L, BlackScreenWatchdog.rearmDelayMs(n))
+        assertEquals(1_500L, BlackScreenWatchdog.rearmDelayMs(1, Verdict.NO_HU_START.reason))
     }
 }
