@@ -32,6 +32,13 @@ android {
     }
 
     signingConfigs {
+        // сборки Essa на GitHub Actions: постоянный ключ, иначе у каждого прогона свой debug.keystore и обновление не ставится
+        create("essa") {
+            storeFile = file("signing/essa-debug.jks")
+            storePassword = "essa-headswap"
+            keyAlias = "essa"
+            keyPassword = "essa-headswap"
+        }
         if (releaseProps.isNotEmpty()) {
             create("release") {
                 storeFile = file(releaseProps.getProperty("storeFile"))
@@ -45,6 +52,7 @@ android {
     buildTypes {
         debug {
             buildConfigField("boolean", "WIRELESS_BETA", "true")
+            signingConfig = signingConfigs.getByName("essa")
         }
         release {
             isMinifyEnabled = false
