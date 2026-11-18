@@ -48,8 +48,6 @@ object Msg {
     const val TELE_STATE_CHANGE_IDLE = 0x00010016
     const val SCREEN_ON = 0x00010018
     const val FOREGROUND = 0x0001001B
-    /** MD просит ГУ вывести CarLife на экран; ГУ отвечает GO_TO_FOREGROUND 0x00018025 (docs/carlife-protocol.md). */
-    const val REQUEST_GO_TO_FOREGROUND = 0x00010038
     const val LAUNCH_MODE_NORMAL = 0x0001801D
     const val LAUNCH_MODE_PHONE = 0x0001801E
     const val GO_TO_DESKTOP = 0x00010021

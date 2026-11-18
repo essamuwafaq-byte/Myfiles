@@ -179,10 +179,6 @@ class BridgeService : Service() {
     /** Сколько раз в этом ожидании перезапускали RFCOMM-слушатели без подключения ГУ ([btNudge]). Главная нить. */
     private var btNudges = 0
     private val btNudgeTick = Runnable { btNudge() }
-    /** Рывков RFCOMM после обрыва без новой сессии ([staleLinkKick]). Главная нить. */
-    private var staleKicks = 0
-    private var staleSkips = 0
-    private val staleKickTick = Runnable { staleLinkKick() }
     private var wakeLock: PowerManager.WakeLock? = null
     private val audioDiag = AudioDiag()
     /** Ветка A, диагностика: RFCOMM `carlife` слушаем, пока ждём машину по Wi-Fi. Колбэки с bt-нити перекидываем на главную. */
@@ -552,8 +548,7 @@ class BridgeService : Service() {
             main.postDelayed(hintTick, AUTO_HINT_MS)
         }
         if (linkWaiting) scheduleCarNet()
-        // выбранная машина: будим её и в ручном ожидании (кнопка), не только по ACL (лог 2026-11-18 17:45)
-        if (linkWaiting && (autoMode || CarProfile(this).btMac != null)) {
+        if (linkWaiting && autoMode) {
             main.removeCallbacks(btNudgeTick)
             main.postDelayed(btNudgeTick, BT_NUDGE_MS)
         }
@@ -565,36 +560,13 @@ class BridgeService : Service() {
      * [BT_NUDGE_MAX] раз за ожидание. Идущий BT-обмен или вход в группу не трогаем ([CarlifeBtProbe.idle]).
      */
     private fun btNudge() {
-        if (!wifiBMode || stopRequested || session != null || !linkWaiting) return
-        if (!autoMode && CarProfile(this).btMac == null) return
+        if (!wifiBMode || !autoMode || stopRequested || session != null || !linkWaiting) return
         if (btAcceptsThisWait > 0 || !btProbe.idle()) return
         if (btNudges >= BT_NUDGE_MAX) return
         btNudges++
         WLog.ev(WLog.BT, "nudge", "n" to btNudges)
         btProbe.restart("nudge")
-        // исходящий RFCOMM к ГУ (CarlifeBtProbe.dialCar) не включаем: Levin 2026-11-18 - в SDP нет carlife, SPP отказывает
-        // на всех 12 попытках, а каждая держит Bluetooth ~20 с
         main.postDelayed(btNudgeTick, BT_NUDGE_MS)
-    }
-
-    /**
-     * Воздушная сессия оборвалась, ждём ГУ, а она не возвращается. Если Bluetooth с ней ещё открыт (RFCOMM жив, idle()
-     * = false), сама ГУ новый обмен не начнёт: рвём его и поднимаем слушатели, ГУ подключится заново и пришлёт TARGET_INFO.
-     */
-    private fun staleLinkKick() {
-        if (!wifiBMode || stopRequested || session != null) return
-        if (staleKicks >= STALE_LINK_KICK_MAX) return
-        if (btProbe.joining() && staleSkips < 2) {      // ГУ вернулась по BT, входим в её группу: не мешаем (но не вечно)
-            staleSkips++
-            main.postDelayed(staleKickTick, STALE_LINK_KICK_MS)
-            return
-        }
-        staleSkips = 0
-        staleKicks++
-        WLog.ev(WLog.BT, "stale-kick", "n" to staleKicks, "idle" to btProbe.idle())
-        AppLog.i("сервис: ГУ не вернулась после обрыва, переподключаю Bluetooth ($staleKicks)")
-        btProbe.restart("stale-kick")
-        main.postDelayed(staleKickTick, STALE_LINK_KICK_MS)
     }
 
     /** Новое ожидание по Wi-Fi (авто или ручное): сброс счётчиков и таймер подсказки про Bluetooth. */
@@ -753,12 +725,6 @@ class BridgeService : Service() {
             val restart = btProbe.idle()
             WLog.ev(WLog.TRIGGER, "auto-mark", "why" to "waiting", "btRestart" to restart)
             if (restart) btProbe.restart("ACL вернулся")
-            // машина снова на связи: будить и звонить ей заново. Прежний RFCOMM этого ожидания умер вместе с ACL
-            // (лог 2026-11-18 18:07: accept, обрыв ACL, ACL вернулся - и тишина до Baidu), счётчик сбрасываем
-            btNudges = 0
-            btAcceptsThisWait = 0
-            main.removeCallbacks(btNudgeTick)
-            main.postDelayed(btNudgeTick, BT_NUDGE_MS)
             return
         }
         hintShown = false
@@ -1046,8 +1012,6 @@ class BridgeService : Service() {
         getSystemService(NotificationManager::class.java).cancel(USB_TO_AIR_NOTIF_ID)
         main.removeCallbacks(carNetTick)      // сессия идёт: новых запросов сети машины нет (сам запрос держим, CarNetEvent.SESSION_START)
         main.removeCallbacks(btNudgeTick)
-        main.removeCallbacks(staleKickTick)
-        staleKicks = 0
         cancelBtHint()
         CarLifeState.accessory = transport.label
         CarLifeState.wirelessSession = transport.caps.kind == TransportCaps.TCP6.kind
@@ -1103,11 +1067,7 @@ class BridgeService : Service() {
         // сервер AA одноразовый. Старый режим живого хоста с кропом (WIDE*, R1024) в passthrough живёт только с SPS-кропом (h529):
         // если область масштабируется (WIDE_976, своё с растяжением) - перекодирование.
         val hostMode = h.core.videoMode
-        // воздух: перекодирование с лесенкой битрейта. Прямой проброс идёт с фиксированным битрейтом AA, и при просадке
-        // Wi-Fi Direct (Levin HSAE 2026-11-18: слив 3 МБ/с -> 0,2-0,7 МБ/с) очередь забивается, кадры летят - экран моргает,
-        // потом ГУ рвёт сессию. С перекодированием BitratePolicy снижает битрейт по бэклогу (ADR 0018: «моргает - перекодирование»)
-        val airTranscode = AIR_TRANSCODE && transport.caps == TransportCaps.TCP6
-        val transcode = aaPrefs.transcode || airTranscode || (hostMode.needsTranscode && !hostMode.spsCropable)
+        val transcode = aaPrefs.transcode || (hostMode.needsTranscode && !hostMode.spsCropable)
         if (h.core.transcodeEnabled != transcode) {
             AppLog.i("BRIDGE видео: ${if (transcode) "перекодирование включаю принудительно (режим хоста ${h.core.videoMode.label})" else "возвращаю passthrough по настройке"}")
             h.core.transcodeEnabled = transcode
@@ -1573,16 +1533,12 @@ class BridgeService : Service() {
         if (wifiBMode && !stopRequested) {
             // беспровод: ГУ ушла (обрыв Wi-Fi, выключили машину) - снова маяк и ожидание, AA пока тёплая (grace)
             CarLifeState.wireless = getString(R.string.wl_state_lost)
-            val delay = if (watchdog) BlackScreenWatchdog.rearmDelayMs(watchdogStreak, reason) else WIFI_B_REARM_MS
+            val delay = if (watchdog) BlackScreenWatchdog.rearmDelayMs(watchdogStreak) else WIFI_B_REARM_MS
             WLog.ev(WLog.LINK, "rearm", "after" to reason, "streak" to watchdogStreak, "delayMs" to delay)
             if (watchdog && watchdogStreak >= 2 && btProbe.idle()) btProbe.restart("watchdog")      // свежий SDP: ГУ заново по Bluetooth
             main.postDelayed({
                 if (wifiBMode && !stopRequested && session == null && !linkWaiting) startWifiB()
             }, delay)
-            if (s.transportKind == TransportCaps.TCP6.kind) {
-                main.removeCallbacks(staleKickTick)
-                main.postDelayed(staleKickTick, STALE_LINK_KICK_MS)
-            }
         }
     }
 
@@ -1692,16 +1648,6 @@ class BridgeService : Service() {
         private const val WIFI_B_WAIT_MS = 10 * 60_000L
         /** Пауза перед новым ожиданием после обрыва беспроводной сессии. */
         private const val WIFI_B_REARM_MS = 1_500L
-        /** Воздух: принудительное перекодирование. Выключено по просьбе владельца - прямой проброс, как в настройках. */
-        private const val AIR_TRANSCODE = false
-        /**
-         * После обрыва воздушной сессии ГУ не вернулась по TCP, хотя Bluetooth живой (Levin 2026-11-18: 12 мин тишины при
-         * открытом RFCOMM). Через столько рвём RFCOMM и поднимаем слушатели заново: ГУ переподключает BT (за ~0,5 с,
-         * тот же лог 15:05:59 -> 15:06:00) и заново даёт реквизиты Wi-Fi Direct.
-         */
-        private const val STALE_LINK_KICK_MS = 5_000L
-        /** Не больше стольких рывков подряд без новой сессии. */
-        private const val STALE_LINK_KICK_MAX = 20
         /** Машина рядом по Bluetooth, а RFCOMM от неё нет: через сколько перезапускать слушатели ([btNudge]). */
         private const val BT_NUDGE_MS = 5_000L
         /** Не больше стольких перезапусков слушателей за одно ожидание (~3 мин). */

@@ -71,9 +71,6 @@ class P2pJoin(
     private var joinedIp: Inet4Address? = null
     @Volatile private var iface: LanIface? = null
 
-    /** Идёт вход в группу ГУ (цель есть, адреса ещё нет). Главная нить. */
-    fun joining(): Boolean = target != null && joinedIp == null
-
     /** Адрес из P2P-подсети, куда мы вошли (для фильтра входящих TCP). */
     fun owns(a: InetAddress): Boolean = iface?.contains(a) == true
 
