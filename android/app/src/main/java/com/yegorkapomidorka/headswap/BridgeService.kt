@@ -572,12 +572,8 @@ class BridgeService : Service() {
         btNudges++
         WLog.ev(WLog.BT, "nudge", "n" to btNudges)
         btProbe.restart("nudge")
-        // ГУ так и молчит: на 2-м шаге (~10 с) и дальше раз в 4 шага телефон сам звонит ГУ по RFCOMM
-        if (btNudges == 2 || (btNudges > 2 && btNudges % 4 == 2)) {
-            val mac = CarProfile(this).btMac
-            if (mac == null) WLog.ev(WLog.BT, "dial-skip", "attempt" to btNudges, "why" to "машина не выбрана")
-            else btProbe.dialCar(mac, btNudges)
-        }
+        // исходящий RFCOMM к ГУ (CarlifeBtProbe.dialCar) не включаем: Levin 2026-11-18 - в SDP нет carlife, SPP отказывает
+        // на всех 12 попытках, а каждая держит Bluetooth ~20 с
         main.postDelayed(btNudgeTick, BT_NUDGE_MS)
     }
 

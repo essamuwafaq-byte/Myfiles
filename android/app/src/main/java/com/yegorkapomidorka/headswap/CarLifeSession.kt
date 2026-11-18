@@ -367,6 +367,7 @@ class CarLifeSession(
     // ---------------- CMD ----------------
 
     private fun onCmd(m: CmdMsg) {
+        if (m.type == HU_GO_TO_FOREGROUND) WLog.ev(WLog.HS, "hu-go-to-foreground", "afterMs" to SystemClock.elapsedRealtime() - t0)
         when (m.type) {
             Msg.HU_PROTOCOL_VERSION -> {
                 val reply = protocolHandshake.accept(m)
@@ -1506,7 +1507,11 @@ class CarLifeSession(
         if (huStartMs == 0L && videoInited && now - lastForegroundNudgeMs >= BlackScreenWatchdog.FOREGROUND_NUDGE_MS &&
             now - t0 >= BlackScreenWatchdog.FOREGROUND_NUDGE_MS) {
             lastForegroundNudgeMs = now
-            AppLog.i("сессия: ГУ не прислала START, напоминаю FOREGROUND")
+            // Levin HSAE 2026-11-18: на FOREGROUND не реагирует, CarLife выводит только тап по Baidu. REQUEST_GO_TO_FOREGROUND -
+            // штатная просьба MD «покажи CarLife» (ГУ отвечает GO_TO_FOREGROUND), шлём её первой
+            AppLog.i("сессия: ГУ не прислала START, прошу вывести CarLife (REQUEST_GO_TO_FOREGROUND + FOREGROUND)", true)
+            WLog.ev(WLog.HS, "ask-foreground", "afterMs" to now - t0)
+            sendCmd(Msg.REQUEST_GO_TO_FOREGROUND, null)
             sendCmd(Msg.FOREGROUND, null)
         }
         val verdict = BlackScreenWatchdog.check(
@@ -1658,6 +1663,8 @@ class CarLifeSession(
 
         /** Keepalive на PAUSE: пустой VIDEO_DATA, у VW 20082120 VIDEO_HEARTBEAT. */
         @Volatile @JvmStatic var PAUSE_KEEPALIVE_ENABLED = true
+        /** Ответ ГУ на REQUEST_GO_TO_FOREGROUND. */
+        private const val HU_GO_TO_FOREGROUND = 0x00018025
         /** Воздух: рвать сессию с чёрным экраном и подключаться заново (BlackScreenWatchdog). */
         @Volatile @JvmStatic var BLACK_SCREEN_WATCHDOG = true
 
