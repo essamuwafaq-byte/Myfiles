@@ -552,7 +552,8 @@ class BridgeService : Service() {
             main.postDelayed(hintTick, AUTO_HINT_MS)
         }
         if (linkWaiting) scheduleCarNet()
-        if (linkWaiting && autoMode) {
+        // выбранная машина: будим её и в ручном ожидании (кнопка), не только по ACL (лог 2026-11-18 17:45)
+        if (linkWaiting && (autoMode || CarProfile(this).btMac != null)) {
             main.removeCallbacks(btNudgeTick)
             main.postDelayed(btNudgeTick, BT_NUDGE_MS)
         }
@@ -564,7 +565,8 @@ class BridgeService : Service() {
      * [BT_NUDGE_MAX] раз за ожидание. Идущий BT-обмен или вход в группу не трогаем ([CarlifeBtProbe.idle]).
      */
     private fun btNudge() {
-        if (!wifiBMode || !autoMode || stopRequested || session != null || !linkWaiting) return
+        if (!wifiBMode || stopRequested || session != null || !linkWaiting) return
+        if (!autoMode && CarProfile(this).btMac == null) return
         if (btAcceptsThisWait > 0 || !btProbe.idle()) return
         if (btNudges >= BT_NUDGE_MAX) return
         btNudges++
@@ -753,6 +755,10 @@ class BridgeService : Service() {
             val restart = btProbe.idle()
             WLog.ev(WLog.TRIGGER, "auto-mark", "why" to "waiting", "btRestart" to restart)
             if (restart) btProbe.restart("ACL вернулся")
+            // машина снова на связи: будить и звонить ей заново
+            btNudges = 0
+            main.removeCallbacks(btNudgeTick)
+            main.postDelayed(btNudgeTick, BT_NUDGE_MS)
             return
         }
         hintShown = false
