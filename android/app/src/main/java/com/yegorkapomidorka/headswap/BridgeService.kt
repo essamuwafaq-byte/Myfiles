@@ -574,7 +574,9 @@ class BridgeService : Service() {
         btProbe.restart("nudge")
         // ГУ так и молчит: на 2-м шаге (~10 с) и дальше раз в 4 шага телефон сам звонит ГУ по RFCOMM
         if (btNudges == 2 || (btNudges > 2 && btNudges % 4 == 2)) {
-            CarProfile(this).btMac?.let { btProbe.dialCar(it, btNudges) }
+            val mac = CarProfile(this).btMac
+            if (mac == null) WLog.ev(WLog.BT, "dial-skip", "attempt" to btNudges, "why" to "машина не выбрана")
+            else btProbe.dialCar(mac, btNudges)
         }
         main.postDelayed(btNudgeTick, BT_NUDGE_MS)
     }

@@ -345,10 +345,16 @@ class CarlifeBtProbe(
      */
     @SuppressLint("MissingPermission")
     fun dialCar(mac: String, attempt: Int) {
-        if (!running || active != null || dialing) return
-        val adapter = ctx.getSystemService(BluetoothManager::class.java)?.adapter ?: return
-        if (!hasPermission() || !adapter.isEnabled) return
-        val dev = try { adapter.getRemoteDevice(mac) } catch (_: IllegalArgumentException) { return }
+        fun skip(why: String) = WLog.ev(WLog.BT, "dial-skip", "attempt" to attempt, "why" to why)
+        if (!running) return skip("слушатели остановлены")
+        if (active != null) return skip("RFCOMM уже открыт")
+        if (dialing) return skip("прошлая попытка идёт")
+        val adapter = ctx.getSystemService(BluetoothManager::class.java)?.adapter ?: return skip("нет адаптера")
+        if (!hasPermission()) return skip("нет BLUETOOTH_CONNECT")
+        if (!adapter.isEnabled) return skip("Bluetooth выключен")
+        // CDM хранит адрес строчными (лог 2026-11-18: dev=f8:6b:...), getRemoteDevice принимает только заглавные
+        val dev = try { adapter.getRemoteDevice(mac.uppercase()) } catch (e: IllegalArgumentException) { return skip("адрес: ${e.message}") }
+        WLog.ev(WLog.BT, "dial-start", "attempt" to attempt)
         dialing = true
         Thread({
             try {
