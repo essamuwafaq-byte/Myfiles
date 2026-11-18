@@ -757,8 +757,10 @@ class BridgeService : Service() {
             val restart = btProbe.idle()
             WLog.ev(WLog.TRIGGER, "auto-mark", "why" to "waiting", "btRestart" to restart)
             if (restart) btProbe.restart("ACL вернулся")
-            // машина снова на связи: будить и звонить ей заново
+            // машина снова на связи: будить и звонить ей заново. Прежний RFCOMM этого ожидания умер вместе с ACL
+            // (лог 2026-11-18 18:07: accept, обрыв ACL, ACL вернулся - и тишина до Baidu), счётчик сбрасываем
             btNudges = 0
+            btAcceptsThisWait = 0
             main.removeCallbacks(btNudgeTick)
             main.postDelayed(btNudgeTick, BT_NUDGE_MS)
             return
