@@ -1703,7 +1703,7 @@ class BridgeService : Service() {
          * открытом RFCOMM). Через столько рвём RFCOMM и поднимаем слушатели заново: ГУ переподключает BT (за ~0,5 с,
          * тот же лог 15:05:59 -> 15:06:00) и заново даёт реквизиты Wi-Fi Direct.
          */
-        private const val STALE_LINK_KICK_MS = 15_000L
+        private const val STALE_LINK_KICK_MS = 5_000L
         /** Не больше стольких рывков подряд без новой сессии. */
         private const val STALE_LINK_KICK_MAX = 20
         /** Машина рядом по Bluetooth, а RFCOMM от неё нет: через сколько перезапускать слушатели ([btNudge]). */

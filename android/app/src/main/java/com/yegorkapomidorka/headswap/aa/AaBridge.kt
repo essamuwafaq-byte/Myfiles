@@ -2264,6 +2264,7 @@ class AaBridgeCore(
     private var spliceDisabled: String? = null          // вставка невозможна до конца AA-сессии (причина)
     private var aaFrameGapMs = Long.MAX_VALUE          // пауза перед последним кадром AA
     private var builder: IdrBuilder? = null
+    private var builderAir = false
     private val spliceStats = SpliceStats()
 
     /** Нить сборки своего IDR; null - своя, создаётся при первой сборке. Тесты ставят исполнитель в той же нити. */
@@ -2445,7 +2446,11 @@ class AaBridgeCore(
                 return
             }
             spliceBuilding = true
-            val b = builder ?: IdrBuilder(spliceSlicePool ?: newSlicePool(), SPLICE_SLICES).also { builder = it }
+            // воздух (Levin, Wi-Fi Direct): свой IDR меньше - 180-210 КБ раз в 2 с забивали канал, ГУ перезапускала CarLife
+            val air = link.isAir
+            val b = builder?.takeIf { builderAir == air } ?: (if (air)
+                IdrBuilder(spliceSlicePool ?: newSlicePool(), SPLICE_SLICES, target = AIR_IDR_TARGET_BYTES, minQp = AIR_IDR_MIN_QP, startQp = AIR_IDR_MIN_QP)
+            else IdrBuilder(spliceSlicePool ?: newSlicePool(), SPLICE_SLICES)).also { builder = it; builderAir = air }
             val exec = spliceExecutor ?: newBuildThread()
             BuildTask(job, b, exec, pic)
         }
@@ -3292,7 +3297,10 @@ class AaBridgeCore(
         const val SPLICE_SEND_BACKOFF_MAX_MS = 30_000L
         const val SPLICE_STALL_MS = 3000L        // декодер опорных картинок не двигается при идущих кадрах AA дольше - перезапуск
         const val SPLICE_STALL_IDLE_MS = 1000L   // AA молчит дольше - кадров нет, декодер вставшим не считаем
-        const val SPLICE_KICK_GRACE_MS = 1500L   // h529-повтор IDR от AA откладывается на столько, если свой IDR вот-вот уйдёт
+        const val SPLICE_KICK_GRACE_MS = 1500L
+        /** Свой IDR по воздуху: потолок размера и нижний QP (около вдвое меньше, чем 180-210 КБ при QP 18). */
+        const val AIR_IDR_TARGET_BYTES = 90_000
+        const val AIR_IDR_MIN_QP = 24   // h529-повтор IDR от AA откладывается на столько, если свой IDR вот-вот уйдёт
         const val SPLICE_RETRY_MS = 1000L        // пауза между попытками (без IDR на ГУ, после отказа, пропуска, таймаута)
 
         private const val NEVER = Long.MIN_VALUE / 4
