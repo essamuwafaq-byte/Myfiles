@@ -56,6 +56,10 @@ class CarlifeBtProbe(
     @Volatile private var rejoinGen = 0
     @Volatile private var rejoining = false
     private var adapterReceiver: BroadcastReceiver? = null
+    /** Идёт исходящее подключение телефона к ГУ ([dialCar]). */
+    @Volatile private var dialing = false
+    /** Сокет, на котором ГУ ответила WIRELESS_INFO: исходящий без ответа закрываем ([DIAL_REPLY_MS]). */
+    @Volatile private var answered: BluetoothSocket? = null
 
     /** Входящий TCP из P2P-группы ГУ: пускаем в Tcp6Listener наравне с подсетями маяка. */
     fun ownsPeer(a: java.net.InetAddress): Boolean = p2p.owns(a)
@@ -205,6 +209,7 @@ class CarlifeBtProbe(
                     WLog.ev(WLog.BT, "rx", "type" to BtMsg.name(f.type), "len" to f.body.size, *kv.toTypedArray())
                     when (f.type) {
                         BtMsg.HU_WIRELESS_INFO -> {
+                            answered = s
                             CarLifeState.btProbe = "ГУ ответила: ${kv.joinToString(" ") { "${it.first}=${it.second}" }}"
                             if (!targetAsked) {
                                 targetAsked = true
@@ -331,11 +336,74 @@ class CarlifeBtProbe(
         }
     }
 
+    /**
+     * Toyota Levin HSAE (2026-11-18): на части запусков ГУ сама к RFCOMM `carlife` не подключается, пока на её экране не
+     * откроют CarLife (5 мин тишины при живом ACL и 23 перезапусках слушателей). Пробуем наоборот: телефон - клиент.
+     * Сначала пишем в лог, какие UUID ГУ объявила в SDP (видно, есть ли у неё свой сервер `carlife`), потом
+     * подключаемся по CarLife UUID и SPP (secure и insecure) и ведём тот же обмен, что и на входящем ([talk]).
+     * Если ГУ за [DIAL_REPLY_MS] не ответила WIRELESS_INFO, это чужой SPP-сервис: закрываем.
+     */
+    @SuppressLint("MissingPermission")
+    fun dialCar(mac: String, attempt: Int) {
+        if (!running || active != null || dialing) return
+        val adapter = ctx.getSystemService(BluetoothManager::class.java)?.adapter ?: return
+        if (!hasPermission() || !adapter.isEnabled) return
+        val dev = try { adapter.getRemoteDevice(mac) } catch (_: IllegalArgumentException) { return }
+        dialing = true
+        Thread({
+            try {
+                val uuids = try { dev.uuids?.map { it.uuid } } catch (_: SecurityException) { null }
+                WLog.ev(WLog.BT, "car-sdp", "attempt" to attempt, "n" to (uuids?.size ?: -1),
+                    "carlife" to (uuids?.contains(CARLIFE_UUID) == true), "spp" to (uuids?.contains(SPP_UUID) == true),
+                    "uuids" to (uuids?.joinToString(" ") { it.toString().substring(0, 8) } ?: "нет"))
+                try { dev.fetchUuidsWithSdp() } catch (_: SecurityException) {}      // освежить кэш к следующей попытке
+                val order = listOf("carlife" to CARLIFE_UUID, "spp" to SPP_UUID)
+                for ((tag, uuid) in order) for (secure in listOf(true, false)) {
+                    if (!running || active != null) return@Thread
+                    val s = try {
+                        if (secure) dev.createRfcommSocketToServiceRecord(uuid) else dev.createInsecureRfcommSocketToServiceRecord(uuid)
+                    } catch (e: Exception) {
+                        WLog.ev(WLog.BT, "dial-fail", "uuid" to tag, "secure" to secure, "err" to e.message)
+                        continue
+                    }
+                    val t0 = SystemClock.elapsedRealtime()
+                    try {
+                        s.connect()
+                    } catch (e: IOException) {
+                        WLog.ev(WLog.BT, "dial-fail", "uuid" to tag, "secure" to secure, "ms" to SystemClock.elapsedRealtime() - t0, "err" to e.message)
+                        try { s.close() } catch (_: IOException) {}
+                        continue
+                    }
+                    WLog.ev(WLog.BT, "dial-ok", "uuid" to tag, "secure" to secure, "ms" to SystemClock.elapsedRealtime() - t0)
+                    AppLog.i("BT carlife: телефон сам подключился к ГУ ($tag, ${if (secure) "secure" else "insecure"})")
+                    // сервису сообщаем только о настоящем CarLife-ответе: иначе он перестанет перезапускать слушатели
+                    main.postDelayed({
+                        if (answered === s) {
+                            accepts++
+                            onAccept()
+                        } else if (active === s) {
+                            WLog.ev(WLog.BT, "dial-silent", "uuid" to tag, "secure" to secure)
+                            try { s.close() } catch (_: IOException) {}
+                        }
+                    }, DIAL_REPLY_MS)
+                    talk("out-$tag", s)
+                    if (answered === s) return@Thread      // настоящий обмен был: следующую попытку решит сервис
+                }
+            } finally {
+                dialing = false
+            }
+        }, "bt-dial").apply { isDaemon = true }.start()
+    }
+
     companion object {
         const val SERVICE_NAME = "carlife"
         val UUIDS = listOf(
             "spp" to UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"),
             "carlife" to UUID.fromString("a45bc7e5-bb50-4949-9de1-f78299cf6d78"),
         )
+        val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+        val CARLIFE_UUID: UUID = UUID.fromString("a45bc7e5-bb50-4949-9de1-f78299cf6d78")
+        /** Исходящее подключение: столько ждём WIRELESS_INFO от ГУ, иначе это не CarLife. */
+        const val DIAL_REPLY_MS = 5_000L
     }
 }
